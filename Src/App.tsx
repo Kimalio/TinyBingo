@@ -10,15 +10,10 @@ import './styles.css'
 import goalsData from './data/goals.example.json'
 import ActionLog, { type Action } from './components/ActionLog'
 
+// База для GitHub Pages: /<Repo>/  (например, /TinyBingo/)
 function getBase(): string {
-    // 1) BASE_URL от Vite (на GitHub Pages будет "/TinyBingo/")
-    const fromVite = (import.meta as any)?.env?.BASE_URL
-    if (fromVite) return String(fromVite).replace(/\/+$/, '/')
-    // 2) <base href="..."> если вдруг есть
-    const fromTag = document.querySelector('base')?.getAttribute('href')
-    if (fromTag) return String(fromTag).replace(/\/+$/, '/')
-    // 3) по умолчанию — корень
-    return '/'
+    const segs = location.pathname.split('/').filter(Boolean)
+    return segs.length ? `/${segs[0]}/` : '/'
 }
 
 function randomName() { return 'Tarnished-' + Math.floor(Math.random() * 10_000) }
@@ -32,16 +27,9 @@ export default function App() {
     // ===== Room =====
     const roomId = React.useMemo(() => {
         const base = getBase()
-
-        // убираем base и берём последний сегмент пути как roomId
-        const parts = location.pathname
-            .replace(base, '')
-            .replace(/^\/+/, '')
-            .replace(/\/+$/, '')
-            .split('/')
-            .filter(Boolean)
-
-        const tail = parts.length ? parts[parts.length - 1] : ''
+        const segs = location.pathname.split('/').filter(Boolean)
+        // если есть хотя бы два сегмента (repo + room), берём последний как roomId
+        const tail = segs.length > 1 ? segs[segs.length - 1] : ''
         if (tail) return tail
 
         // roomId отсутствует → создаём и подставляем в URL с учётом base
@@ -281,7 +269,7 @@ export default function App() {
         const base = getBase()
         const clean = roomInput.trim().replace(/\s+/g, '-').toLowerCase()
         if (!clean) return
-        location.href = `${base}${clean}`
+        location.href = `${base}${clean}` // всегда /<Repo>/<room>
     }
 
     return (
