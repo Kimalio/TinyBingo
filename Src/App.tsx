@@ -81,6 +81,7 @@ export default function App() {
             localStorage.setItem('me', JSON.stringify(me))
         }
 
+        // первый, кто зашёл в комнату, становится хостом
         doc.transact(() => {
             if (!ySettings.has('hostUid')) ySettings.set('hostUid', me!.uid)
         })
@@ -97,6 +98,23 @@ export default function App() {
 
         localStorage.setItem('me', JSON.stringify({ ...me, color }))
     }, [awareness, doc, ySettings])
+
+    // ===== Host / Guest flag =====
+    const [isHost, setIsHost] = React.useState(false)
+    React.useEffect(() => {
+        const update = () => {
+            const me = awareness.getLocalState() as any
+            const hostUid = (ySettings.get('hostUid') as string) || me?.uid
+            setIsHost(!!me?.uid && hostUid === me.uid)
+        }
+        update()
+        awareness.on('change', update)
+        ySettings.observe(update)
+        return () => {
+            awareness.off('change', update)
+            ySettings.unobserve(update)
+        }
+    }, [awareness, ySettings])
 
     // ===== Name editing =====
     const [myName, setMyName] = React.useState<string>('')
@@ -177,16 +195,32 @@ export default function App() {
         goalsSource: (ySettings.get('goalsSource') as string) ?? undefined,
     }
 
-    // ===== Generate / Regenerate board =====
+    // ===== Generate / Regenerate board (только хост) =====
     function regenerate() {
-        const ids = buildBoard(pool, settings.size, settings.seed, false)
+        // только хост может генерировать
+        const me = awareness.getLocalState() as any
+        const hostUid = ySettings.get('hostUid') as string
+        const isHost = !!me?.uid && me.uid === hostUid
+        if (!isHost) return
+
+        const ids = buildBoard(pool, settings.size, settings.seed, /*freeCenter*/ false)
+
         doc.transact(() => {
+            // заменить поле целиком
             yBoard.delete(0, yBoard.length)
             yBoard.insert(0, ids)
+
+            // очистить отметки
             Array.from(yHits.keys()).forEach(k => yHits.delete(k))
-            yLog.delete(0, yLog.length) // очищаем лог
+
+            // очистить лог
+            yLog.delete(0, yLog.length)
+
+            // пометить, что доска инициализирована хостом
+            ySettings.set('initialized', true)
         })
     }
+
 
     // ===== First load: wait IndexedDB, then maybe generate =====
     React.useEffect(() => {
@@ -200,8 +234,9 @@ export default function App() {
         return () => { cancelled = true }
     }, [persist, yBoard, pool]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ===== Patch settings =====
+    // ===== Patch settings (только хост меняет настройки) =====
     function patchSettings(patch: Partial<RoomSettings>) {
+        if (!isHost) return
         doc.transact(() => {
             for (const [k, v] of Object.entries(patch)) ySettings.set(k, v as any)
         })
@@ -263,27 +298,37 @@ export default function App() {
         return state?.color as string | undefined
     }
 
-    // ===== Room selector (manual) =====
+    // ===== Room selector (manual) — виден только хосту =====
     const [roomInput, setRoomInput] = React.useState('')
     React.useEffect(() => { setRoomInput(roomId) }, [roomId])
 
     function goToRoom() {
+        if (!isHost) return
         const base = getBase() // всегда /TinyBingo/
         const clean = roomInput.trim().replace(/\s+/g, '-').toLowerCase()
         if (!clean) return
         location.href = `${base}${clean}` // /TinyBingo/<roomId>
     }
 
+    // peers (включая себя)
+    const peersIncludingMe = awareness.getStates().size || 0
+
     return (
         <div className="max-w-6xl mx-auto p-4 space-y-4">
             <h1 className="text-2xl font-bold">Elden Ring Bingo</h1>
 
-            <TopBar
-                settings={settings}
-                onChange={patchSettings}
-                onRegenerate={regenerate}
-                showLoaders={false}
-            />
+            {isHost ? (
+                <TopBar
+                    settings={settings}
+                    onChange={patchSettings}
+                    onRegenerate={regenerate}
+                    showLoaders={false}
+                />
+            ) : (
+                <div className="rounded-xl border border-neutral-700 p-3 text-sm opacity-80">
+                    Вы гость — можете отмечать клетки. Генерация доступна только хозяину комнаты.
+                </div>
+            )}
 
             <div className="flex gap-4">
                 <div className="flex-1">
@@ -311,27 +356,29 @@ export default function App() {
                         />
                     </div>
 
-                    {/* Комната */}
-                    <div className="rounded-xl border border-neutral-700 p-3">
-                        <div className="text-sm opacity-80 mb-2">Комната</div>
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                value={roomInput}
-                                onChange={(e) => setRoomInput(e.target.value)}
-                                className="flex-1 px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-sm"
-                                placeholder="введите имя комнаты"
-                                maxLength={32}
-                            />
-                            <button
-                                onClick={goToRoom}
-                                className="px-3 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm"
-                                title="Перейти в комнату"
-                            >
-                                Перейти
-                            </button>
+                    {/* Комната — только для хоста */}
+                    {isHost && (
+                        <div className="rounded-xl border border-neutral-700 p-3">
+                            <div className="text-sm opacity-80 mb-2">Комната</div>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={roomInput}
+                                    onChange={(e) => setRoomInput(e.target.value)}
+                                    className="flex-1 px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-sm"
+                                    placeholder="введите имя комнаты"
+                                    maxLength={32}
+                                />
+                                <button
+                                    onClick={goToRoom}
+                                    className="px-3 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm"
+                                    title="Перейти в комнату"
+                                >
+                                    Перейти
+                                </button>
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     <PlayersPanel players={players} />
                     <ActionLog actions={actions} />
@@ -339,7 +386,7 @@ export default function App() {
             </div>
 
             <footer className="text-xs opacity-70 pt-4">
-                Room: {roomId} • Peers: {Math.max(0, (awareness.getStates().size ?? 0) - 1)} •
+                Room: {roomId} • Peers (incl. me): {peersIncludingMe} •
                 Source: {settings.goalsSource ?? '—'}
             </footer>
         </div>
