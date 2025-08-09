@@ -10,13 +10,12 @@ import './styles.css'
 import goalsData from './data/goals.example.json'
 import ActionLog, { type Action } from './components/ActionLog'
 
-// 1) basePath: /<Repo>/, например /TinyBingo/
+// Базовый префикс репозитория на GitHub Pages: /TinyBingo/
 function getBase(): string {
     const segs = location.pathname.split('/').filter(Boolean)
     return segs.length ? `/${segs[0]}/` : '/'
 }
 
-// utils
 function randomName() { return 'Tarnished-' + Math.floor(Math.random() * 10_000) }
 function randomColor() {
     const hues = [0, 30, 60, 120, 180, 210, 240, 270, 300]
@@ -26,11 +25,10 @@ function randomColor() {
 
 export default function App() {
     // ===== Room =====
-    // 2) roomId: ТОЛЬКО имя комнаты (последний сегмент пути после base)
+    // roomId — это последний сегмент после /TinyBingo/
     const roomId = React.useMemo(() => {
         const base = getBase()
         const segs = location.pathname.split('/').filter(Boolean)
-        // если есть <repo>/<room> — берём последний сегмент как room
         const tail = segs.length > 1 ? segs[segs.length - 1] : ''
         if (tail) return tail
 
@@ -41,7 +39,7 @@ export default function App() {
         return rid
     }, [])
 
-    // 3) yRoomKey формируется внутри initY (там префикс), сюда передаём чистый roomId
+    // Yjs
     const { doc, provider, awareness, persist } = React.useMemo(() => initY(roomId), [roomId])
 
     // ===== Shared Yjs structures =====
@@ -69,11 +67,12 @@ export default function App() {
             ; (goalsData as any[]).forEach((g: any) => { dict[g.id] = g.text })
         setLabels(dict)
         setPool(goalsData as any)
-        patchSettings({ goalsSource: 'goals.example.json' })
+        // просто для подписи в футере
+        doc.transact(() => { ySettings.set('goalsSource', 'goals.example.json') })
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    // ===== Awareness: current player + roles/colors =====
+    // ===== Awareness: текущий игрок + назначение хоста =====
     React.useEffect(() => {
         let me = JSON.parse(localStorage.getItem('me') || 'null') as { uid: string; name: string; color?: string } | null
         if (!me) {
@@ -86,20 +85,20 @@ export default function App() {
             if (!ySettings.has('hostUid')) ySettings.set('hostUid', me!.uid)
         })
         const hostUid = (ySettings.get('hostUid') as string) || me.uid
-        const isHost = hostUid === me.uid
-        const color = isHost ? '#ef4444' : '#3b82f6'
+        const iAmHost = hostUid === me.uid
+        const color = iAmHost ? '#ef4444' : '#3b82f6'
 
         awareness.setLocalState({
             uid: me.uid,
-            name: me.name || (isHost ? 'Host' : 'Player 2'),
+            name: me.name || (iAmHost ? 'Host' : 'Player 2'),
             color,
-            role: isHost ? 'host' : 'guest',
+            role: iAmHost ? 'host' : 'guest',
         })
 
         localStorage.setItem('me', JSON.stringify({ ...me, color }))
     }, [awareness, doc, ySettings])
 
-    // ===== Host / Guest flag =====
+    // ===== Host / Guest флаг (зависит от hostUid в ySettings) =====
     const [isHost, setIsHost] = React.useState(false)
     React.useEffect(() => {
         const update = () => {
@@ -116,34 +115,7 @@ export default function App() {
         }
     }, [awareness, ySettings])
 
-    // ===== Name editing =====
-    const [myName, setMyName] = React.useState<string>('')
-    React.useEffect(() => {
-        const setFromLocal = () => {
-            const local = awareness.getLocalState() as any
-            if (local?.name && local.name !== myName) setMyName(local.name)
-        }
-        setFromLocal()
-        const onChange = () => setFromLocal()
-        awareness.on('change', onChange)
-        return () => { awareness.off('change', onChange) }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [awareness])
-
-    function changeMyName(newName: string) {
-        setMyName(newName)
-        const me = awareness.getLocalState() as any
-        if (!me) return
-        const updated = { ...me, name: newName }
-        awareness.setLocalState(updated)
-        localStorage.setItem('me', JSON.stringify({
-            uid: updated.uid,
-            name: updated.name,
-            color: updated.color,
-        }))
-    }
-
-    // ===== Players list =====
+    // ===== Список игроков =====
     const [players, setPlayers] = React.useState<Player[]>([])
     React.useEffect(() => {
         const update = () => {
@@ -163,7 +135,7 @@ export default function App() {
         return () => { awareness.off('change', update) }
     }, [awareness])
 
-    // ===== Force re-render on Yjs changes =====
+    // ===== Ререндер на изменения в Yjs =====
     const [, force] = React.useReducer(x => x + 1, 0)
     React.useEffect(() => {
         const rerender = () => force()
@@ -179,7 +151,7 @@ export default function App() {
         }
     }, [yBoard, ySettings, yHits])
 
-    // ===== Default settings once =====
+    // ===== Настройки по умолчанию =====
     React.useEffect(() => {
         if (!ySettings.has('seed')) ySettings.set('seed', Math.random().toString(36).slice(2, 8))
         if (!ySettings.has('size')) ySettings.set('size', 5)
@@ -195,46 +167,43 @@ export default function App() {
         goalsSource: (ySettings.get('goalsSource') as string) ?? undefined,
     }
 
-    // ===== Generate / Regenerate board (только хост) =====
+    // ===== Генерация/перегенерация (только хост) =====
     function regenerate() {
-        // только хост может генерировать
         const me = awareness.getLocalState() as any
         const hostUid = ySettings.get('hostUid') as string
-        const isHost = !!me?.uid && me.uid === hostUid
-        if (!isHost) return
+        const amHost = !!me?.uid && me.uid === hostUid
+        if (!amHost) return
 
         const ids = buildBoard(pool, settings.size, settings.seed, /*freeCenter*/ false)
 
         doc.transact(() => {
-            // заменить поле целиком
             yBoard.delete(0, yBoard.length)
             yBoard.insert(0, ids)
-
             // очистить отметки
             Array.from(yHits.keys()).forEach(k => yHits.delete(k))
-
             // очистить лог
             yLog.delete(0, yLog.length)
-
-            // пометить, что доска инициализирована хостом
+            // пометить, что доска инициализирована
             ySettings.set('initialized', true)
         })
     }
 
-
-    // ===== First load: wait IndexedDB, then maybe generate =====
+    // ===== Первая загрузка =====
+    // Только хост создаёт доску, гость ничего не генерирует.
     React.useEffect(() => {
         let cancelled = false
         persist.whenSynced.then(() => {
             if (cancelled) return
+            if (!isHost) return
             if (yBoard.length === 0 && pool.length > 0) {
                 regenerate()
             }
         })
         return () => { cancelled = true }
-    }, [persist, yBoard, pool]) // eslint-disable-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [persist, yBoard, pool, isHost])
 
-    // ===== Patch settings (только хост меняет настройки) =====
+    // ===== Изменение настроек (только хост) =====
     function patchSettings(patch: Partial<RoomSettings>) {
         if (!isHost) return
         doc.transact(() => {
@@ -242,7 +211,7 @@ export default function App() {
         })
     }
 
-    // ===== Toggle cell + log =====
+    // ===== Тоггл клетки + лог (гостю можно) =====
     function toggleCell(i: number) {
         let me = awareness.getLocalState() as any
         if (!me?.uid) {
@@ -298,19 +267,34 @@ export default function App() {
         return state?.color as string | undefined
     }
 
-    // ===== Room selector (manual) — виден только хосту =====
+    // ===== Room selector (только хост) =====
     const [roomInput, setRoomInput] = React.useState('')
     React.useEffect(() => { setRoomInput(roomId) }, [roomId])
 
     function goToRoom() {
         if (!isHost) return
-        const base = getBase() // всегда /TinyBingo/
+        const base = getBase()
         const clean = roomInput.trim().replace(/\s+/g, '-').toLowerCase()
         if (!clean) return
-        location.href = `${base}${clean}` // /TinyBingo/<roomId>
+        location.href = `${base}${clean}`
     }
 
-    // peers (включая себя)
+    // ===== Invite link (только хост) =====
+    function makeInviteUrl(): string {
+        const base = getBase()
+        const url = `${location.origin}${base}${roomId}?guest=1`
+        return url
+    }
+    async function copyInvite() {
+        try {
+            await navigator.clipboard.writeText(makeInviteUrl())
+            alert('Ссылка для гостя скопирована!')
+        } catch {
+            prompt('Скопируйте ссылку вручную:', makeInviteUrl())
+        }
+    }
+
+    // peers (включая себя, если локальное состояние выставлено)
     const peersIncludingMe = awareness.getStates().size || 0
 
     return (
@@ -318,12 +302,29 @@ export default function App() {
             <h1 className="text-2xl font-bold">Elden Ring Bingo</h1>
 
             {isHost ? (
-                <TopBar
-                    settings={settings}
-                    onChange={patchSettings}
-                    onRegenerate={regenerate}
-                    showLoaders={false}
-                />
+                <>
+                    <TopBar
+                        settings={settings}
+                        onChange={patchSettings}
+                        onRegenerate={regenerate}
+                        showLoaders={false}
+                    />
+                    {/* Пригласить гостя */}
+                    <div className="rounded-xl border border-neutral-700 p-3 flex items-center gap-2">
+                        <input
+                            readOnly
+                            value={makeInviteUrl()}
+                            className="flex-1 px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-sm"
+                        />
+                        <button
+                            onClick={copyInvite}
+                            className="px-3 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm"
+                            title="Скопировать ссылку"
+                        >
+                            Пригласить
+                        </button>
+                    </div>
+                </>
             ) : (
                 <div className="rounded-xl border border-neutral-700 p-3 text-sm opacity-80">
                     Вы гость — можете отмечать клетки. Генерация доступна только хозяину комнаты.
@@ -348,8 +349,18 @@ export default function App() {
                         <div className="text-sm opacity-80 mb-2">Имя игрока</div>
                         <input
                             type="text"
-                            value={myName}
-                            onChange={(e) => changeMyName(e.target.value)}
+                            value={(awareness.getLocalState() as any)?.name ?? ''}
+                            onChange={(e) => {
+                                const me = awareness.getLocalState() as any
+                                if (!me) return
+                                const updated = { ...me, name: e.target.value }
+                                awareness.setLocalState(updated)
+                                localStorage.setItem('me', JSON.stringify({
+                                    uid: updated.uid,
+                                    name: updated.name,
+                                    color: updated.color,
+                                }))
+                            }}
                             className="w-full px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-sm"
                             placeholder="Погасший"
                             maxLength={24}
