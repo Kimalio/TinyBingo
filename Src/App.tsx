@@ -20,10 +20,25 @@ function randomColor() {
 export default function App() {
     // ===== Room =====
     const roomId = React.useMemo(() => {
-        const fromPath = location.pathname.replace('/', '')
-        if (fromPath) return fromPath
+        // Базовый префикс на GitHub Pages, например "/TinyBingo/"
+        const base = ((import.meta as any)?.env?.BASE_URL ?? '/').replace(/\/+$/, '/')
+
+
+        // Убираем base и берём последний сегмент пути как roomId
+        const parts = location.pathname
+            .replace(base, '')
+            .replace(/^\/+/, '')
+            .replace(/\/+$/, '')
+            .split('/')
+            .filter(Boolean)
+
+        const tail = parts.length ? parts[parts.length - 1] : ''
+        if (tail) return tail
+
+        // roomId отсутствует → создаём и подставляем в URL с учётом base
         const rid = Math.random().toString(36).slice(2, 8)
-        history.replaceState(null, '', `/${rid}`)
+        const newUrl = base + rid + location.search + location.hash
+        history.replaceState(null, '', newUrl)
         return rid
     }, [])
 
@@ -35,7 +50,7 @@ export default function App() {
     const ySettings = React.useMemo(() => doc.getMap<any>('settings'), [doc])
     const yLog = React.useMemo(() => doc.getArray<Action>('log'), [doc])
 
-    // ===== Local pool/labels (not shared) =====
+    // ===== Local (not shared) =====
     const [pool, setPool] = React.useState<GoalsPool>([])
     const [labels, setLabels] = React.useState<Record<string, string>>({ '__FREE__': 'Free Space' })
 
@@ -48,7 +63,7 @@ export default function App() {
         return () => yLog.unobserve(updateLog)
     }, [yLog])
 
-    // ===== Load goals from local JSON once =====
+    // ===== Load goals (local JSON) =====
     React.useEffect(() => {
         const dict: Record<string, string> = { '__FREE__': 'Free Space' }
             ; (goalsData as any[]).forEach((g: any) => { dict[g.id] = g.text })
@@ -86,7 +101,6 @@ export default function App() {
     // ===== Name editing =====
     const [myName, setMyName] = React.useState<string>('')
 
-    // init myName from awareness/localStorage on mount and when awareness local state changes
     React.useEffect(() => {
         const setFromLocal = () => {
             const local = awareness.getLocalState() as any
@@ -138,7 +152,7 @@ export default function App() {
         const rerender = () => force()
         yBoard.observe(rerender)
         ySettings.observe(rerender)
-        // @ts-ignore
+        // @ts-ignore — хотим ловить изменения внутри Y.Array в hits
         yHits.observeDeep(rerender)
         return () => {
             yBoard.unobserve(rerender)
