@@ -1,61 +1,42 @@
 import * as Y from 'yjs'
 import { Awareness } from 'y-protocols/awareness'
-import { WebrtcProvider } from 'y-webrtc'
 import { IndexeddbPersistence } from 'y-indexeddb'
 import { WebsocketProvider } from 'y-websocket'
 
 export type YContext = {
     doc: Y.Doc
-    provider: WebrtcProvider // оставим для совместимости
+    provider: WebsocketProvider
     awareness: Awareness
     persist: IndexeddbPersistence
 }
 
+// Кешируем инстансы, чтобы не плодить документы при повторных initY
 const cache: Map<string, YContext> =
     (window as any).__YCTX__ ?? ((window as any).__YCTX__ = new Map())
 
 export function initY(roomId: string): YContext {
+    // ЕДИНЫЙ ключ комнаты для сети — НИЧЕГО кроме самого roomId!
+    // Внутри добавим префикс, чтобы наш трафик не пересекался с чужим.
     const ROOM = `elden-bingo-${roomId}`
 
-    const existing = cache.get(ROOM)
-    if (existing) return existing
+    const fromCache = cache.get(ROOM)
+    if (fromCache) return fromCache
 
     const doc = new Y.Doc()
+    const awareness = new Awareness(doc)
 
-    // ===== Offline cache (IndexedDB) =====
+    // 1) Локальный офлайн-кеш
     const persist = new IndexeddbPersistence(ROOM, doc)
 
-    // ===== WebRTC =====
-    const provider = new WebrtcProvider(ROOM, doc, {
-        signaling: ['wss://signaling.yjs.dev'],
-        maxConns: 20,
-        filterBcConns: true,
-        awareness: new Awareness(doc),
-    })
+    // 2) Основной транспорт — WebSocket (работает между разными браузерами/устройствами)
+    const provider = new WebsocketProvider('wss://demos.yjs.dev', ROOM, doc, { awareness })
 
-    // ===== WebSocket (для синка между браузерами/устройствами) =====
-    const ws = new WebsocketProvider('wss://demos.yjs.dev', ROOM, doc)
-    ws.awareness.setLocalStateField('synced', true)
-
-    // ===== Локальная синхронизация между вкладками =====
+    // 3) Локальная синхронизация между вкладками одного браузера
     const bc = new BroadcastChannel(ROOM)
-    bc.onmessage = (event) => {
-        try {
-            Y.applyUpdate(doc, event.data)
-        } catch { }
-    }
-    doc.on('update', (update: Uint8Array) => {
-        try {
-            bc.postMessage(update)
-        } catch { }
-    })
+    bc.onmessage = (ev) => { try { Y.applyUpdate(doc, ev.data) } catch { } }
+    doc.on('update', (update: Uint8Array) => { try { bc.postMessage(update) } catch { } })
 
-    const ctx: YContext = {
-        doc,
-        provider,
-        awareness: provider.awareness,
-        persist, // теперь persist доступен в App
-    }
+    const ctx: YContext = { doc, provider, awareness, persist }
     cache.set(ROOM, ctx)
     return ctx
 }
