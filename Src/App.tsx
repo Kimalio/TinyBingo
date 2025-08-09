@@ -10,6 +10,17 @@ import './styles.css'
 import goalsData from './data/goals.example.json'
 import ActionLog, { type Action } from './components/ActionLog'
 
+function getBase(): string {
+    // 1) BASE_URL от Vite (на GitHub Pages будет "/TinyBingo/")
+    const fromVite = (import.meta as any)?.env?.BASE_URL
+    if (fromVite) return String(fromVite).replace(/\/+$/, '/')
+    // 2) <base href="..."> если вдруг есть
+    const fromTag = document.querySelector('base')?.getAttribute('href')
+    if (fromTag) return String(fromTag).replace(/\/+$/, '/')
+    // 3) по умолчанию — корень
+    return '/'
+}
+
 function randomName() { return 'Tarnished-' + Math.floor(Math.random() * 10_000) }
 function randomColor() {
     const hues = [0, 30, 60, 120, 180, 210, 240, 270, 300]
@@ -20,11 +31,9 @@ function randomColor() {
 export default function App() {
     // ===== Room =====
     const roomId = React.useMemo(() => {
-        // Базовый префикс на GitHub Pages, например "/TinyBingo/"
-        const base = ((import.meta as any)?.env?.BASE_URL ?? '/').replace(/\/+$/, '/')
+        const base = getBase()
 
-
-        // Убираем base и берём последний сегмент пути как roomId
+        // убираем base и берём последний сегмент пути как roomId
         const parts = location.pathname
             .replace(base, '')
             .replace(/^\/+/, '')
@@ -37,7 +46,7 @@ export default function App() {
 
         // roomId отсутствует → создаём и подставляем в URL с учётом base
         const rid = Math.random().toString(36).slice(2, 8)
-        const newUrl = base + rid + location.search + location.hash
+        const newUrl = `${base}${rid}${location.search}${location.hash}`
         history.replaceState(null, '', newUrl)
         return rid
     }, [])
@@ -152,7 +161,7 @@ export default function App() {
         const rerender = () => force()
         yBoard.observe(rerender)
         ySettings.observe(rerender)
-        // @ts-ignore — хотим ловить изменения внутри Y.Array в hits
+        // @ts-ignore — ловим изменения внутри Y.Array в hits
         yHits.observeDeep(rerender)
         return () => {
             yBoard.unobserve(rerender)
@@ -264,22 +273,16 @@ export default function App() {
         return state?.color as string | undefined
     }
 
-    // локальное поле ввода для комнаты
+    // ===== Room selector (manual) =====
     const [roomInput, setRoomInput] = React.useState('')
-
-    React.useEffect(() => {
-        setRoomInput(roomId) // при загрузке в поле подставляем текущий roomId
-    }, [roomId])
+    React.useEffect(() => { setRoomInput(roomId) }, [roomId])
 
     function goToRoom() {
-        // base для GitHub Pages
-        const base = ((import.meta as any)?.env?.BASE_URL ?? '/').replace(/\/+$/, '/')
+        const base = getBase()
         const clean = roomInput.trim().replace(/\s+/g, '-').toLowerCase()
         if (!clean) return
-        // просто меняем адрес — страница перегрузится и подключится к новой комнате
         location.href = `${base}${clean}`
     }
-
 
     return (
         <div className="max-w-6xl mx-auto p-4 space-y-4">
@@ -318,7 +321,6 @@ export default function App() {
                         />
                     </div>
 
-
                     {/* Поле для выбора комнаты */}
                     <div className="rounded-xl border border-neutral-700 p-3">
                         <div className="text-sm opacity-80 mb-2">Комната</div>
@@ -340,9 +342,6 @@ export default function App() {
                             </button>
                         </div>
                     </div>
-
-
-
 
                     <PlayersPanel players={players} />
                     <ActionLog actions={actions} />
