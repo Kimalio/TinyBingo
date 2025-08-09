@@ -25,6 +25,11 @@ function randomColor() {
 
 export default function App() {
     // ===== Room =====
+
+    // ===== Определяем режим (хост / гость) из URL =====
+    const params = new URLSearchParams(window.location.search)
+    const isGuestFromUrl = params.get('guest') === '1'
+
     // roomId — это последний сегмент после /TinyBingo/
     const roomId = React.useMemo(() => {
         const base = getBase()
@@ -72,31 +77,41 @@ export default function App() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    // ===== Awareness: текущий игрок + назначение хоста =====
+    // ===== Awareness: current player + роли/цвета (учитываем ?guest=1) =====
     React.useEffect(() => {
+        // 1) получаем/создаём локального игрока
         let me = JSON.parse(localStorage.getItem('me') || 'null') as { uid: string; name: string; color?: string } | null
         if (!me) {
             me = { uid: crypto.randomUUID(), name: randomName() }
             localStorage.setItem('me', JSON.stringify(me))
         }
 
-        // первый, кто зашёл в комнату, становится хостом
+        // 2) если ЭТО НЕ гость, то первый в комнате устанавливает себя как hostUid
         doc.transact(() => {
-            if (!ySettings.has('hostUid')) ySettings.set('hostUid', me!.uid)
+            if (!isGuestFromUrl && !ySettings.has('hostUid')) {
+                ySettings.set('hostUid', me!.uid)
+            }
         })
+
+        // 3) вычисляем роль с учётом ?guest=1
         const hostUid = (ySettings.get('hostUid') as string) || me.uid
-        const iAmHost = hostUid === me.uid
+        const iAmHost = !isGuestFromUrl && hostUid === me.uid
+
+        // 4) цвет: хост — красный, гость — синий
         const color = iAmHost ? '#ef4444' : '#3b82f6'
 
+        // 5) публикуем состояние в awareness (видно всем)
         awareness.setLocalState({
             uid: me.uid,
-            name: me.name || (iAmHost ? 'Host' : 'Player 2'),
+            name: me.name || (iAmHost ? 'Host' : 'Player'),
             color,
             role: iAmHost ? 'host' : 'guest',
         })
 
+        // 6) сохраним локально
         localStorage.setItem('me', JSON.stringify({ ...me, color }))
-    }, [awareness, doc, ySettings])
+    }, [awareness, doc, ySettings, isGuestFromUrl])
+
 
     // ===== Host / Guest флаг (зависит от hostUid в ySettings) =====
     const [isHost, setIsHost] = React.useState(false)
