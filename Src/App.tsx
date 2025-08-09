@@ -10,7 +10,7 @@ import './styles.css'
 import goalsData from './data/goals.example.json'
 import ActionLog, { type Action } from './components/ActionLog'
 
-// Базовый префикс репозитория на GitHub Pages: /TinyBingo/
+// GH Pages base (/TinyBingo/)
 function getBase(): string {
     const segs = location.pathname.split('/').filter(Boolean)
     return segs.length ? `/${segs[0]}/` : '/'
@@ -24,40 +24,34 @@ function randomColor() {
 }
 
 export default function App() {
-    // ===== Room =====
-
-    // ===== Определяем режим (хост / гость) из URL =====
-    const params = new URLSearchParams(window.location.search)
+    // ===== режим из URL =====
+    const params = new URLSearchParams(location.search)
     const isGuestFromUrl = params.get('guest') === '1'
 
-    // roomId — это последний сегмент после /TinyBingo/
+    // ===== roomId — последний сегмент после /TinyBingo/ =====
     const roomId = React.useMemo(() => {
         const base = getBase()
         const segs = location.pathname.split('/').filter(Boolean)
         const tail = segs.length > 1 ? segs[segs.length - 1] : ''
         if (tail) return tail
-
-        // комнаты нет → создаём и подставляем в URL с учётом base
         const rid = Math.random().toString(36).slice(2, 8)
-        const newUrl = `${base}${rid}${location.search}${location.hash}`
-        history.replaceState(null, '', newUrl)
+        history.replaceState(null, '', `${base}${rid}${location.search}${location.hash}`)
         return rid
     }, [])
 
-    // Yjs
+    // ===== Yjs =====
     const { doc, provider, awareness, persist } = React.useMemo(() => initY(roomId), [roomId])
 
-    // ===== Shared Yjs structures =====
     const yBoard = React.useMemo(() => doc.getArray<string>('board'), [doc])
     const yHits = React.useMemo(() => doc.getMap<Y.Array<string>>('hits'), [doc])
     const ySettings = React.useMemo(() => doc.getMap<any>('settings'), [doc])
     const yLog = React.useMemo(() => doc.getArray<Action>('log'), [doc])
 
-    // ===== Local (not shared) =====
+    // ===== локальные данные целей/лейблов =====
     const [pool, setPool] = React.useState<GoalsPool>([])
     const [labels, setLabels] = React.useState<Record<string, string>>({ '__FREE__': 'Free Space' })
 
-    // ===== Log state =====
+    // ===== лог действий =====
     const [actions, setActions] = React.useState<Action[]>([])
     React.useEffect(() => {
         const updateLog = () => setActions(yLog.toArray())
@@ -66,41 +60,33 @@ export default function App() {
         return () => yLog.unobserve(updateLog)
     }, [yLog])
 
-    // ===== Load goals (local JSON) =====
+    // ===== загрузка целей =====
     React.useEffect(() => {
         const dict: Record<string, string> = { '__FREE__': 'Free Space' }
             ; (goalsData as any[]).forEach((g: any) => { dict[g.id] = g.text })
         setLabels(dict)
         setPool(goalsData as any)
-        // просто для подписи в футере
         doc.transact(() => { ySettings.set('goalsSource', 'goals.example.json') })
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    // ===== Awareness: current player + роли/цвета (учитываем ?guest=1) =====
+    // ===== awareness: игрок + роли/цвета с учётом ?guest=1 =====
     React.useEffect(() => {
-        // 1) получаем/создаём локального игрока
         let me = JSON.parse(localStorage.getItem('me') || 'null') as { uid: string; name: string; color?: string } | null
         if (!me) {
             me = { uid: crypto.randomUUID(), name: randomName() }
             localStorage.setItem('me', JSON.stringify(me))
         }
 
-        // 2) если ЭТО НЕ гость, то первый в комнате устанавливает себя как hostUid
+        // первый НЕ гость ставит hostUid
         doc.transact(() => {
-            if (!isGuestFromUrl && !ySettings.has('hostUid')) {
-                ySettings.set('hostUid', me!.uid)
-            }
+            if (!isGuestFromUrl && !ySettings.has('hostUid')) ySettings.set('hostUid', me!.uid)
         })
 
-        // 3) вычисляем роль с учётом ?guest=1
         const hostUid = (ySettings.get('hostUid') as string) || me.uid
         const iAmHost = !isGuestFromUrl && hostUid === me.uid
-
-        // 4) цвет: хост — красный, гость — синий
         const color = iAmHost ? '#ef4444' : '#3b82f6'
 
-        // 5) публикуем состояние в awareness (видно всем)
         awareness.setLocalState({
             uid: me.uid,
             name: me.name || (iAmHost ? 'Host' : 'Player'),
@@ -108,12 +94,10 @@ export default function App() {
             role: iAmHost ? 'host' : 'guest',
         })
 
-        // 6) сохраним локально
         localStorage.setItem('me', JSON.stringify({ ...me, color }))
     }, [awareness, doc, ySettings, isGuestFromUrl])
 
-
-    // ===== Host / Guest флаг (зависит от hostUid в ySettings) =====
+    // ===== признак "я — хост" (реактивно) =====
     const [isHost, setIsHost] = React.useState(false)
     React.useEffect(() => {
         const update = () => {
@@ -130,18 +114,13 @@ export default function App() {
         }
     }, [awareness, ySettings])
 
-    // ===== Список игроков =====
+    // ===== список игроков =====
     const [players, setPlayers] = React.useState<Player[]>([])
     React.useEffect(() => {
         const update = () => {
             const list: Player[] = Array.from(awareness.getStates().values())
                 .filter(Boolean)
-                .map((s: any) => ({
-                    uid: s.uid,
-                    name: s.name,
-                    color: s.color,
-                    role: s.role,
-                }))
+                .map((s: any) => ({ uid: s.uid, name: s.name, color: s.color, role: s.role }))
                 .filter(p => !!p.uid)
             setPlayers(list)
         }
@@ -150,13 +129,13 @@ export default function App() {
         return () => { awareness.off('change', update) }
     }, [awareness])
 
-    // ===== Ререндер на изменения в Yjs =====
+    // ===== перерисовка на изменения Yjs =====
     const [, force] = React.useReducer(x => x + 1, 0)
     React.useEffect(() => {
         const rerender = () => force()
         yBoard.observe(rerender)
         ySettings.observe(rerender)
-        // @ts-ignore — ловим изменения внутри Y.Array в hits
+        // @ts-ignore
         yHits.observeDeep(rerender)
         return () => {
             yBoard.unobserve(rerender)
@@ -166,7 +145,7 @@ export default function App() {
         }
     }, [yBoard, ySettings, yHits])
 
-    // ===== Настройки по умолчанию =====
+    // ===== дефолтные настройки =====
     React.useEffect(() => {
         if (!ySettings.has('seed')) ySettings.set('seed', Math.random().toString(36).slice(2, 8))
         if (!ySettings.has('size')) ySettings.set('size', 5)
@@ -182,43 +161,36 @@ export default function App() {
         goalsSource: (ySettings.get('goalsSource') as string) ?? undefined,
     }
 
-    // ===== Генерация/перегенерация (только хост) =====
+    // ===== генерация — только хост =====
     function regenerate() {
         const me = awareness.getLocalState() as any
         const hostUid = ySettings.get('hostUid') as string
         const amHost = !!me?.uid && me.uid === hostUid
         if (!amHost) return
 
-        const ids = buildBoard(pool, settings.size, settings.seed, /*freeCenter*/ false)
-
+        const ids = buildBoard(pool, settings.size, settings.seed, false)
         doc.transact(() => {
             yBoard.delete(0, yBoard.length)
             yBoard.insert(0, ids)
-            // очистить отметки
             Array.from(yHits.keys()).forEach(k => yHits.delete(k))
-            // очистить лог
             yLog.delete(0, yLog.length)
-            // пометить, что доска инициализирована
             ySettings.set('initialized', true)
         })
     }
 
-    // ===== Первая загрузка =====
-    // Только хост создаёт доску, гость ничего не генерирует.
+    // ===== первая загрузка: только хост генерит, гость ждёт =====
     React.useEffect(() => {
         let cancelled = false
         persist.whenSynced.then(() => {
             if (cancelled) return
             if (!isHost) return
-            if (yBoard.length === 0 && pool.length > 0) {
-                regenerate()
-            }
+            if (yBoard.length === 0 && pool.length > 0) regenerate()
         })
         return () => { cancelled = true }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [persist, yBoard, pool, isHost])
 
-    // ===== Изменение настроек (только хост) =====
+    // ===== изменение настроек — только хост =====
     function patchSettings(patch: Partial<RoomSettings>) {
         if (!isHost) return
         doc.transact(() => {
@@ -226,7 +198,7 @@ export default function App() {
         })
     }
 
-    // ===== Тоггл клетки + лог (гостю можно) =====
+    // ===== клик по клетке + лог (хост и гость) =====
     function toggleCell(i: number) {
         let me = awareness.getLocalState() as any
         if (!me?.uid) {
@@ -266,23 +238,22 @@ export default function App() {
         })
     }
 
-    // ===== Hits map =====
+    // ===== hits obj =====
     const hits: Record<number, string[]> = {}
     yHits.forEach((arr, k) => {
         hits[Number(k)] = (arr as Y.Array<string>).toArray()
     })
 
-    // ===== Helpers =====
+    // ===== helpers =====
     function labelOf(id: string) { return labels[id] ?? id }
     function getColor(uids: string[]) {
         if (!uids.length) return undefined
         const firstUid = uids[0]
-        const state = Array.from(awareness.getStates().values())
-            .find(s => s?.uid === firstUid)
+        const state = Array.from(awareness.getStates().values()).find(s => s?.uid === firstUid)
         return state?.color as string | undefined
     }
 
-    // ===== Room selector (только хост) =====
+    // ===== ручной выбор комнаты — только хост =====
     const [roomInput, setRoomInput] = React.useState('')
     React.useEffect(() => { setRoomInput(roomId) }, [roomId])
 
@@ -294,11 +265,10 @@ export default function App() {
         location.href = `${base}${clean}`
     }
 
-    // ===== Invite link (только хост) =====
+    // ===== инвайт — только хост =====
     function makeInviteUrl(): string {
         const base = getBase()
-        const url = `${location.origin}${base}${roomId}?guest=1`
-        return url
+        return `${location.origin}${base}${roomId}?guest=1`
     }
     async function copyInvite() {
         try {
@@ -309,7 +279,6 @@ export default function App() {
         }
     }
 
-    // peers (включая себя, если локальное состояние выставлено)
     const peersIncludingMe = awareness.getStates().size || 0
 
     return (
@@ -324,7 +293,6 @@ export default function App() {
                         onRegenerate={regenerate}
                         showLoaders={false}
                     />
-                    {/* Пригласить гостя */}
                     <div className="rounded-xl border border-neutral-700 p-3 flex items-center gap-2">
                         <input
                             readOnly
@@ -411,8 +379,20 @@ export default function App() {
                 </div>
             </div>
 
+            {/* DEBUG (временный) */}
+            <div className="rounded-xl border border-rose-700/50 bg-rose-900/10 p-3 text-xs leading-5">
+                <div><b>Debug</b></div>
+                <div>roomId: {roomId}</div>
+                <div>role: {(awareness.getLocalState() as any)?.role || '—'}</div>
+                <div>hostUid in ySettings: {String(ySettings.get('hostUid') || '—')}</div>
+                <div>my uid: {(awareness.getLocalState() as any)?.uid || '—'}</div>
+                <div>guest param: {new URLSearchParams(location.search).get('guest') || '—'}</div>
+                <div>ws status: {provider?.wsconnected ? 'connected' : 'disconnected'}</div>
+                <div>peers (incl. me): {awareness.getStates().size || 0}</div>
+            </div>
+
             <footer className="text-xs opacity-70 pt-4">
-                Room: {roomId} • Peers (incl. me): {peersIncludingMe} •
+                Room: {roomId} • Peers (incl. me): {awareness.getStates().size || 0} •
                 Source: {settings.goalsSource ?? '—'}
             </footer>
         </div>
