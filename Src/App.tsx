@@ -10,12 +10,13 @@ import './styles.css'
 import goalsData from './data/goals.example.json'
 import ActionLog, { type Action } from './components/ActionLog'
 
-// База для GitHub Pages: /<Repo>/  (например, /TinyBingo/)
+// 1) basePath: /<Repo>/, например /TinyBingo/
 function getBase(): string {
     const segs = location.pathname.split('/').filter(Boolean)
     return segs.length ? `/${segs[0]}/` : '/'
 }
 
+// utils
 function randomName() { return 'Tarnished-' + Math.floor(Math.random() * 10_000) }
 function randomColor() {
     const hues = [0, 30, 60, 120, 180, 210, 240, 270, 300]
@@ -25,20 +26,22 @@ function randomColor() {
 
 export default function App() {
     // ===== Room =====
+    // 2) roomId: ТОЛЬКО имя комнаты (последний сегмент пути после base)
     const roomId = React.useMemo(() => {
         const base = getBase()
         const segs = location.pathname.split('/').filter(Boolean)
-        // если есть хотя бы два сегмента (repo + room), берём последний как roomId
+        // если есть <repo>/<room> — берём последний сегмент как room
         const tail = segs.length > 1 ? segs[segs.length - 1] : ''
         if (tail) return tail
 
-        // roomId отсутствует → создаём и подставляем в URL с учётом base
+        // комнаты нет → создаём и подставляем в URL с учётом base
         const rid = Math.random().toString(36).slice(2, 8)
         const newUrl = `${base}${rid}${location.search}${location.hash}`
         history.replaceState(null, '', newUrl)
         return rid
     }, [])
 
+    // 3) yRoomKey формируется внутри initY (там префикс), сюда передаём чистый roomId
     const { doc, provider, awareness, persist } = React.useMemo(() => initY(roomId), [roomId])
 
     // ===== Shared Yjs structures =====
@@ -83,7 +86,7 @@ export default function App() {
         })
         const hostUid = (ySettings.get('hostUid') as string) || me.uid
         const isHost = hostUid === me.uid
-        const color = isHost ? '#ef4444' /* red */ : '#3b82f6' /* blue */
+        const color = isHost ? '#ef4444' : '#3b82f6'
 
         awareness.setLocalState({
             uid: me.uid,
@@ -97,7 +100,6 @@ export default function App() {
 
     // ===== Name editing =====
     const [myName, setMyName] = React.useState<string>('')
-
     React.useEffect(() => {
         const setFromLocal = () => {
             const local = awareness.getLocalState() as any
@@ -266,10 +268,10 @@ export default function App() {
     React.useEffect(() => { setRoomInput(roomId) }, [roomId])
 
     function goToRoom() {
-        const base = getBase()
+        const base = getBase() // всегда /TinyBingo/
         const clean = roomInput.trim().replace(/\s+/g, '-').toLowerCase()
         if (!clean) return
-        location.href = `${base}${clean}` // всегда /<Repo>/<room>
+        location.href = `${base}${clean}` // /TinyBingo/<roomId>
     }
 
     return (
@@ -296,7 +298,7 @@ export default function App() {
                 </div>
 
                 <div className="w-64 flex flex-col gap-4">
-                    {/* Поле для смены своего имени */}
+                    {/* Имя игрока */}
                     <div className="rounded-xl border border-neutral-700 p-3">
                         <div className="text-sm opacity-80 mb-2">Имя игрока</div>
                         <input
@@ -309,7 +311,7 @@ export default function App() {
                         />
                     </div>
 
-                    {/* Поле для выбора комнаты */}
+                    {/* Комната */}
                     <div className="rounded-xl border border-neutral-700 p-3">
                         <div className="text-sm opacity-80 mb-2">Комната</div>
                         <div className="flex gap-2">
