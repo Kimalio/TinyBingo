@@ -264,6 +264,23 @@ export default function App() {
         return state?.color as string | undefined
     }
 
+    // локальное поле ввода для комнаты
+    const [roomInput, setRoomInput] = React.useState('')
+
+    React.useEffect(() => {
+        setRoomInput(roomId) // при загрузке в поле подставляем текущий roomId
+    }, [roomId])
+
+    function goToRoom() {
+        // base для GitHub Pages
+        const base = ((import.meta as any)?.env?.BASE_URL ?? '/').replace(/\/+$/, '/')
+        const clean = roomInput.trim().replace(/\s+/g, '-').toLowerCase()
+        if (!clean) return
+        // просто меняем адрес — страница перегрузится и подключится к новой комнате
+        location.href = `${base}${clean}`
+    }
+
+
     return (
         <div className="max-w-6xl mx-auto p-4 space-y-4">
             <h1 className="text-2xl font-bold">Elden Ring Bingo</h1>
@@ -300,6 +317,32 @@ export default function App() {
                             maxLength={24}
                         />
                     </div>
+
+
+                    {/* Поле для выбора комнаты */}
+                    <div className="rounded-xl border border-neutral-700 p-3">
+                        <div className="text-sm opacity-80 mb-2">Комната</div>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={roomInput}
+                                onChange={(e) => setRoomInput(e.target.value)}
+                                className="flex-1 px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-sm"
+                                placeholder="введите имя комнаты"
+                                maxLength={32}
+                            />
+                            <button
+                                onClick={goToRoom}
+                                className="px-3 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm"
+                                title="Перейти в комнату"
+                            >
+                                Перейти
+                            </button>
+                        </div>
+                    </div>
+
+
+
 
                     <PlayersPanel players={players} />
                     <ActionLog actions={actions} />
