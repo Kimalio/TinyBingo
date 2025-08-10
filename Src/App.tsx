@@ -10,6 +10,10 @@ import './styles.css'
 import goalsData from './data/goals.example.json'
 import ActionLog, { type Action } from './components/ActionLog'
 
+// адрес HTTP для пинания сервера
+const WS_HTTP = 'https://tinybingo-ws-1.onrender.com';
+
+
 // GH Pages base (/TinyBingo/)
 function getBase(): string {
     const segs = location.pathname.split('/').filter(Boolean)
@@ -253,6 +257,21 @@ export default function App() {
         return state?.color as string | undefined
     }
 
+    async function reconnect() {
+        try {
+            // будим Render (может быть "no-cors", нам важен сам запрос)
+            await fetch(`${WS_HTTP}/healthz`, { mode: 'no-cors' });
+        } catch { /* ок, нам главное постучаться */ }
+
+        // мягко перезадёрнем websocket-провайдера
+        try { provider.disconnect(); } catch { }
+        setTimeout(() => {
+            try { provider.connect(); } catch { }
+        }, 200);
+    }
+
+
+
     // ===== ручной выбор комнаты — только хост =====
     const [roomInput, setRoomInput] = React.useState('')
     React.useEffect(() => { setRoomInput(roomId) }, [roomId])
@@ -309,9 +328,20 @@ export default function App() {
                     </div>
                 </>
             ) : (
-                <div className="rounded-xl border border-neutral-700 p-3 text-sm opacity-80">
-                    Вы гость — можете отмечать клетки. Генерация доступна только хозяину комнаты.
+                <div className="rounded-xl border border-neutral-700 p-3 text-sm opacity-80 space-y-2">
+                    <div>Вы гость — можете отмечать клетки. Генерация доступна только хозяину комнаты.</div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={reconnect}
+                            className="px-3 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm"
+                            title="Переустановить соединение с сервером"
+                        >
+                            Подключиться ещё раз
+                        </button>
+                        <span className="opacity-70">Если сервер «уснул», разбудим его и переподключимся.</span>
+                    </div>
                 </div>
+
             )}
 
             <div className="flex gap-4">
