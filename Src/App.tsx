@@ -13,7 +13,6 @@ import ActionLog, { type Action } from './components/ActionLog'
 // адрес HTTP для пинания сервера
 const WS_HTTP = 'https://tinybingo-ws-1.onrender.com';
 
-
 // GH Pages base (/TinyBingo/)
 function getBase(): string {
     const segs = location.pathname.split('/').filter(Boolean)
@@ -101,6 +100,21 @@ export default function App() {
         localStorage.setItem('me', JSON.stringify({ ...me, color }))
     }, [awareness, doc, ySettings, isGuestFromUrl])
 
+    // === NEW: корректно убираем себя из awareness при закрытии/перезагрузке ===
+    React.useEffect(() => {
+        const sayBye = () => {
+            try { awareness.setLocalState(null) } catch { }
+        }
+        window.addEventListener('beforeunload', sayBye)
+        window.addEventListener('pagehide', sayBye) // safari/ios
+
+        return () => {
+            window.removeEventListener('beforeunload', sayBye)
+            window.removeEventListener('pagehide', sayBye)
+            sayBye()
+        }
+    }, [awareness])
+
     // ===== признак "я — хост" (реактивно) =====
     const [isHost, setIsHost] = React.useState(false)
     React.useEffect(() => {
@@ -122,11 +136,14 @@ export default function App() {
     const [players, setPlayers] = React.useState<Player[]>([])
     React.useEffect(() => {
         const update = () => {
-            const list: Player[] = Array.from(awareness.getStates().values())
-                .filter(Boolean)
-                .map((s: any) => ({ uid: s.uid, name: s.name, color: s.color, role: s.role }))
-                .filter(p => !!p.uid)
-            setPlayers(list)
+            // === NEW: дедупликация по uid, чтобы не показывать "призраков"
+            const byUid = new Map<string, Player>()
+                ; (awareness.getStates() as Map<number, any>).forEach((s) => {
+                    if (s?.uid) byUid.set(s.uid, {
+                        uid: s.uid, name: s.name, color: s.color, role: s.role
+                    })
+                })
+            setPlayers(Array.from(byUid.values()))
         }
         update()
         awareness.on('change', update)
@@ -259,18 +276,11 @@ export default function App() {
 
     async function reconnect() {
         try {
-            // будим Render (может быть "no-cors", нам важен сам запрос)
-            await fetch(`${WS_HTTP}/healthz`, { mode: 'no-cors' });
-        } catch { /* ок, нам главное постучаться */ }
-
-        // мягко перезадёрнем websocket-провайдера
-        try { provider.disconnect(); } catch { }
-        setTimeout(() => {
-            try { provider.connect(); } catch { }
-        }, 200);
+            await fetch(`${WS_HTTP}/healthz`, { mode: 'no-cors' })
+        } catch { }
+        try { provider.disconnect() } catch { }
+        setTimeout(() => { try { provider.connect() } catch { } }, 200)
     }
-
-
 
     // ===== ручной выбор комнаты — только хост =====
     const [roomInput, setRoomInput] = React.useState('')
@@ -341,7 +351,6 @@ export default function App() {
                         <span className="opacity-70">Если сервер «уснул», разбудим его и переподключимся.</span>
                     </div>
                 </div>
-
             )}
 
             <div className="flex gap-4">
@@ -422,7 +431,7 @@ export default function App() {
             </div>
 
             <footer className="text-xs opacity-70 pt-4">
-                Room: {roomId} • Peers (incl. me): {awareness.getStates().size || 0} •
+                Room: {roomId} • Peers (incl. me): {peersIncludingMe} •
                 Source: {settings.goalsSource ?? '—'}
             </footer>
         </div>
