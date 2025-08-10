@@ -18,7 +18,7 @@ export default function ActionLog({ actions }: Props) {
             <ul className="space-y-1 max-h-64 overflow-y-auto text-sm">
                 {actions.map((a, idx) => (
                     <li key={idx} style={{ color: a.color || 'inherit' }}>
-                        {a.playerName} закрыл «{a.cellText}» [{new Date(a.timestamp).toLocaleTimeString()}]
+                        {a.playerName} «{a.cellText}» [{new Date(a.timestamp).toLocaleTimeString()}]
                     </li>
                 ))}
             </ul>
