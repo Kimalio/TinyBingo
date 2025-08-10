@@ -418,7 +418,7 @@ export default function App() {
                 </div>
             </div>
 
-            {/* DEBUG (временный) */}
+            {/* DEBUG (временный)
             <div className="rounded-xl border border-rose-700/50 bg-rose-900/10 p-3 text-xs leading-5">
                 <div><b>Debug</b></div>
                 <div>roomId: {roomId}</div>
@@ -428,7 +428,7 @@ export default function App() {
                 <div>guest param: {new URLSearchParams(location.search).get('guest') || '—'}</div>
                 <div>ws status: {provider?.wsconnected ? 'connected' : 'disconnected'}</div>
                 <div>peers (incl. me): {awareness.getStates().size || 0}</div>
-            </div>
+            </div> */}
 
             <footer className="text-xs opacity-70 pt-4">
                 Room: {roomId} • Peers (incl. me): {peersIncludingMe} •

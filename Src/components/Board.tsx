@@ -15,10 +15,8 @@ export default function Board({ size, board, hits, onToggle, labelOf, getColor }
         gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))`,
     }), [size])
 
-    // общий размер шрифта для всех ячеек
-    const [fontPx, setFontPx] = useState<number>(14)
+    const [fontPx, setFontPx] = useState<number>(12)
     const gridRef = useRef<HTMLDivElement | null>(null)
-
     const textsKey = useMemo(() => board.map(labelOf).join('|'), [board, labelOf])
 
     const measureAndFit = useCallback(() => {
@@ -27,27 +25,20 @@ export default function Board({ size, board, hits, onToggle, labelOf, getColor }
         const els = Array.from(root.querySelectorAll<HTMLElement>('.bingo-cell-text'))
         if (els.length === 0) return
 
-        // границы бинарного поиска
         let lo = 10   // минимально допустимый
-        let hi = 18   // максимально желанный (можно подкрутить)
+        let hi = 12   // максимально допустимый теперь = 12
         const fitsWith = (px: number) => {
             for (const el of els) {
                 el.style.fontSize = `${px}px`
             }
             // force reflow
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const _ = els[0].offsetHeight
-
-            // Проверяем и высоту, и ширину (чтобы длинные слова не вылезали)
+            void els[0].offsetHeight
             return els.every(el =>
                 el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth
             )
         }
 
-        // быстрый выход, если и "hi" влезает
         if (fitsWith(hi)) { setFontPx(hi); return }
-
-        // бинарный поиск общего минимума, который влезает всем
         while (hi - lo > 0.5) {
             const mid = (hi + lo) / 2
             if (fitsWith(mid)) lo = mid
@@ -56,10 +47,7 @@ export default function Board({ size, board, hits, onToggle, labelOf, getColor }
         setFontPx(Math.floor(lo))
     }, [])
 
-    useLayoutEffect(() => {
-        measureAndFit()
-    }, [measureAndFit, size, textsKey])
-
+    useLayoutEffect(() => { measureAndFit() }, [measureAndFit, size, textsKey])
     useLayoutEffect(() => {
         const onResize = () => measureAndFit()
         window.addEventListener('resize', onResize)
@@ -75,7 +63,6 @@ export default function Board({ size, board, hits, onToggle, labelOf, getColor }
             {board.map((id, i) => {
                 const uids = hits[i] ?? []
                 const color = typeof getColor === 'function' ? getColor(uids) : undefined
-
                 return (
                     <Cell
                         key={i}
@@ -91,3 +78,4 @@ export default function Board({ size, board, hits, onToggle, labelOf, getColor }
         </div>
     )
 }
+

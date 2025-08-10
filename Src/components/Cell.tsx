@@ -26,17 +26,15 @@ export default function Cell({ text, onToggle, isFree, color, fontPx }: Props) {
         >
             <div className="h-full w-full flex items-center justify-center text-center select-none">
                 <div
-                    className="bingo-cell-text leading-tight"
+                    className="bingo-cell-text flex items-center justify-center"
                     style={{
                         fontSize: `${fontPx}px`,
                         lineHeight: 1.15,
-                        // Важное: не рвём слова по буквам, не ставим переносы.
                         wordBreak: 'keep-all',
                         overflowWrap: 'normal',
                         hyphens: 'none',
-                        // Ограничиваемся площадью ячейки:
                         display: '-webkit-box',
-                        WebkitLineClamp: 4,          // максимум 4 строки
+                        WebkitLineClamp: 4,
                         WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
