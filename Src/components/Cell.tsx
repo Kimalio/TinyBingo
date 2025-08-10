@@ -24,9 +24,11 @@ export default function Cell({ text, onToggle, isFree, color, fontPx }: Props) {
             )}
             title={text}
         >
-            <div className="h-full w-full flex items-center justify-center text-center select-none">
+            <div
+                className="h-full w-full flex items-center justify-center text-center select-none"
+            >
                 <div
-                    className="bingo-cell-text flex items-center justify-center"
+                    className="bingo-cell-text flex items-center justify-center text-center"
                     style={{
                         fontSize: `${fontPx}px`,
                         lineHeight: 1.15,
@@ -40,6 +42,7 @@ export default function Cell({ text, onToggle, isFree, color, fontPx }: Props) {
                         textOverflow: 'ellipsis',
                         width: '100%',
                         height: '100%',
+                        whiteSpace: 'normal',
                     }}
                 >
                     {isFree ? 'FREE' : text}

@@ -26,7 +26,7 @@ export default function Board({ size, board, hits, onToggle, labelOf, getColor }
         if (els.length === 0) return
 
         let lo = 10   // минимально допустимый
-        let hi = 12   // максимально допустимый теперь = 12
+        let hi = 13   // максимально допустимый теперь = 13
         const fitsWith = (px: number) => {
             for (const el of els) {
                 el.style.fontSize = `${px}px`
