@@ -25,8 +25,8 @@ export default function Board({ size, board, hits, onToggle, labelOf, getColor }
         const els = Array.from(root.querySelectorAll<HTMLElement>('.bingo-cell-text'))
         if (els.length === 0) return
 
-        let lo = 10   // минимально допустимый
-        let hi = 13   // максимально допустимый теперь = 13
+        let lo = 8   // минимально допустимый
+        let hi = 14   // максимально допустимый теперь
         const fitsWith = (px: number) => {
             for (const el of els) {
                 el.style.fontSize = `${px}px`

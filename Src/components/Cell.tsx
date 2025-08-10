@@ -7,7 +7,7 @@ type Props = {
     onToggle: () => void
     isFree?: boolean
     color?: string
-    fontPx: number
+    fontPx: number        // общий размер шрифта, приходит из Board
 }
 
 export default function Cell({ text, onToggle, isFree, color, fontPx }: Props) {
@@ -24,25 +24,30 @@ export default function Cell({ text, onToggle, isFree, color, fontPx }: Props) {
             )}
             title={text}
         >
-            <div
-                className="h-full w-full flex items-center justify-center text-center select-none"
-            >
+            {/* Обертка на всю ячейку: настоящий вертикальный + горизонтальный центр через grid */}
+            <div className="h-full w-full grid place-items-center text-center select-none">
+                {/* Сам текст: без фиксированной высоты! */}
                 <div
-                    className="bingo-cell-text flex items-center justify-center text-center"
+                    className="bingo-cell-text"
                     style={{
                         fontSize: `${fontPx}px`,
                         lineHeight: 1.15,
+
+                        // Не разрывать слова и не переносить по слогам
                         wordBreak: 'keep-all',
                         overflowWrap: 'normal',
                         hyphens: 'none',
+                        whiteSpace: 'normal',
+
+                        // Обрезка по 4 строкам с многоточием
                         display: '-webkit-box',
                         WebkitLineClamp: 4,
                         WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        width: '100%',
-                        height: '100%',
-                        whiteSpace: 'normal',
+
+                        maxWidth: '100%',
+                        maxHeight: '100%',
                     }}
                 >
                     {isFree ? 'FREE' : text}
