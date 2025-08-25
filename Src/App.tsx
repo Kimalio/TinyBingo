@@ -127,6 +127,70 @@ export default function App() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
+    // ===== отслеживание изменений источника целей =====
+    React.useEffect(() => {
+        if (!ySettings) return;
+
+        const goalsSourceType = ySettings.get('goalsSourceType') as 'local' | 'sheets';
+        console.log('Источник целей изменился на:', goalsSourceType);
+
+        if (goalsSourceType === 'sheets') {
+            // Загружаем цели из Google Sheets CSV
+            const loadFromSheets = async () => {
+                try {
+                    console.log('Загружаем цели из Google Sheets...');
+                    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6JrTSfk8Q5FGXLVG9sgbJueEWXi4i12agnCNvBTbnM5CNoOXMSt-fC1Ar9liZs0C3nZS99zFjufa-/pub?gid=0&single=true&output=csv';
+                    const response = await fetch(csvUrl);
+                    const csvText = await response.text();
+
+                    // Парсим CSV
+                    const lines = csvText.split('\n').filter(line => line.trim());
+                    const goals = lines.slice(1).map((line, index) => {
+                        const [id, text] = line.split(',').map(field => field.trim().replace(/"/g, ''));
+                        return {
+                            id: id || `T${String(index + 1).padStart(3, '0')}`,
+                            text: text || `Цель ${index + 1}`,
+                            weight: 1
+                        };
+                    });
+
+                    console.log(`Загружено ${goals.length} целей из CSV`);
+                    const dict: Record<string, string> = { '__FREE__': 'Free Space' };
+                    goals.forEach((g: any) => { dict[g.id] = g.text });
+
+                    setLabels(dict);
+                    setPool(goals);
+                    doc.transact(() => {
+                        ySettings.set('goalsSource', 'Google Sheets CSV');
+                    });
+                } catch (error) {
+                    console.error('Ошибка загрузки CSV:', error);
+                    // Fallback к локальным данным
+                    const dict: Record<string, string> = { '__FREE__': 'Free Space' };
+                    (goalsData as any[]).forEach((g: any) => { dict[g.id] = g.text });
+                    setLabels(dict);
+                    setPool(goalsData as any);
+                    doc.transact(() => {
+                        ySettings.set('goalsSource', 'goals.example.json (fallback)');
+                        ySettings.set('goalsSourceType', 'local');
+                    });
+                }
+            };
+
+            loadFromSheets();
+        } else if (goalsSourceType === 'local') {
+            console.log('Загружаем локальные цели...');
+            // Локальные данные
+            const dict: Record<string, string> = { '__FREE__': 'Free Space' };
+            (goalsData as any[]).forEach((g: any) => { dict[g.id] = g.text });
+            setLabels(dict);
+            setPool(goalsData as any);
+            doc.transact(() => {
+                ySettings.set('goalsSource', 'goals.example.json');
+            });
+        }
+    }, [ySettings, doc, goalsData, ySettings.get('goalsSourceType')])
+
     // ===== инициализация таймера при первом запуске =====
     React.useEffect(() => {
         const me = awareness.getLocalState() as any
@@ -247,12 +311,13 @@ export default function App() {
         }
     }, [yBoard, ySettings, yHits])
 
-    // ===== дефолтные настройки =====
+    // ===== настройки по умолчанию =====
     React.useEffect(() => {
-        if (!ySettings.has('seed')) ySettings.set('seed', Math.random().toString(36).slice(2, 8))
         if (!ySettings.has('size')) ySettings.set('size', 5)
-        if (!ySettings.has('freeCenter')) ySettings.set('freeCenter', false)
+        if (!ySettings.has('seed')) ySettings.set('seed', 'seed')
+        if (!ySettings.has('freeCenter')) ySettings.set('freeCenter', true)
         if (!ySettings.has('mode')) ySettings.set('mode', 'standard')
+        if (!ySettings.has('goalsSourceType')) ySettings.set('goalsSourceType', 'sheets')
         if (!ySettings.has('botMode')) ySettings.set('botMode', 'medium')
     }, [ySettings])
 
@@ -262,6 +327,7 @@ export default function App() {
         freeCenter: (ySettings.get('freeCenter') as boolean) ?? true,
         mode: (ySettings.get('mode') as 'standard' | 'blackout') ?? 'standard',
         goalsSource: (ySettings.get('goalsSource') as string) ?? undefined,
+        goalsSourceType: (ySettings.get('goalsSourceType') as 'local' | 'sheets') ?? 'sheets',
         gameMode: (ySettings.get('gameMode') as 'pvp' | 'pve') ?? 'pvp',
         botMode: (ySettings.get('botMode') as 'test' | 'easy' | 'medium' | 'hard') ?? 'easy',
         botName: (ySettings.get('botName') as string) ?? undefined,
@@ -360,7 +426,7 @@ export default function App() {
                 arr!.push([me.uid])
                 yLog.push([{
                     playerName: me.name,
-                    cellText: `отметил «${goalName}»`,
+                    cellText: `отметил ${goalName}`,
                     timestamp: Date.now(),
                     color: me.color,
                 }])
@@ -475,7 +541,7 @@ export default function App() {
                     arr.push(['bot']);
                     yLog.push([{
                         playerName: settings.botName || 'Bot',
-                        cellText: `отметил «${labelOf(yBoard.get(idx))}»`,
+                        cellText: `отметил ${labelOf(yBoard.get(idx))}`,
                         timestamp: Date.now(),
                         color: '#3b82f6',
                     }]);
@@ -597,7 +663,7 @@ export default function App() {
                     />
                 </div>
 
-                <div className="w-64 flex flex-col gap-4">
+                <div className="w-80 flex flex-col gap-4">
                     {/* Имя игрока */}
                     <div className="rounded-xl border border-neutral-700 p-3">
                         <div className="text-sm opacity-80 mb-2">Имя игрока</div>
@@ -667,18 +733,6 @@ export default function App() {
                     <ActionLog actions={actions} />
                 </div>
             </div>
-
-            {/* DEBUG (временный)
-            <div className="rounded-xl border border-rose-700/50 bg-rose-900/10 p-3 text-xs leading-5">
-                <div><b>Debug</b></div>
-                <div>roomId: {roomId}</div>
-                <div>role: {(awareness.getLocalState() as any)?.role || '—'}</div>
-                <div>hostUid in ySettings: {String(ySettings.get('hostUid') || '—')}</div>
-                <div>my uid: {(awareness.getLocalState() as any)?.uid || '—'}</div>
-                <div>guest param: {new URLSearchParams(location.search).get('guest') || '—'}</div>
-                <div>ws status: {provider?.wsconnected ? 'connected' : 'disconnected'}</div>
-                <div>peers (incl. me): {awareness.getStates().size || 0}</div>
-            </div> */}
 
             <footer className="text-xs opacity-70 pt-4">
                 Room: {roomId} • Peers (incl. me): {peersIncludingMe} •

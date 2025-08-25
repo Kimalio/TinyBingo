@@ -51,12 +51,12 @@ export default function TopBar({
     return (
         <div className="flex flex-wrap items-center gap-2 p-2 bg-neutral-900/60 rounded-xl">
             <div className="flex items-center gap-2">
-                <label className="text-sm opacity-80">Room:</label>
+                <label className="text-sm opacity-80">Комната:</label>
                 <code className="text-xs bg-neutral-800 px-2 py-1 rounded">{new URL(window.location.href).pathname.replace('/', '') || 'local'}</code>
             </div>
 
             <div className="flex items-center gap-2">
-                <label className="text-sm opacity-80">Seed</label>
+                <label className="text-sm opacity-80">Сид</label>
                 <input value={settings.seed} onChange={e => onChange({ seed: e.target.value })}
                     className="px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-sm w-36" />
                 <button onClick={onRegenerate} className="px-2 py-1 rounded bg-emerald-700/60 hover:bg-emerald-700 text-sm">Regenerate</button>
@@ -72,18 +72,15 @@ export default function TopBar({
                 <span className="text-xs opacity-70">{settings.gameMode === 'pve' ? 'Против бота' : 'Два игрока'}</span>
             </div>
 
+
+
             <div className="flex items-center gap-2">
-                <label className="text-sm opacity-80">Size</label>
-                <select value={settings.size} onChange={e => onChange({ size: Number(e.target.value) as 3 | 4 | 5 })}
+                <label className="text-sm opacity-80">Источник целей</label>
+                <select value={settings.goalsSourceType || 'local'} onChange={e => onChange({ goalsSourceType: e.target.value as 'local' | 'sheets' })}
                     className="px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-sm">
-                    <option value={3}>3×3</option>
-                    <option value={4}>4×4</option>
-                    <option value={5}>5×5</option>
+                    <option value="local">Ресурс 1</option>
+                    <option value="sheets">Ресурс 2</option>
                 </select>
-                <label className="inline-flex items-center gap-1 text-sm">
-                    <input type="checkbox" checked={settings.freeCenter} onChange={e => onChange({ freeCenter: e.target.checked })} />
-                    Free center
-                </label>
             </div>
 
             {gameTimer && (

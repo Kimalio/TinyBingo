@@ -12,7 +12,8 @@ export type RoomSettings = {
     seed: string;             // сид
     freeCenter: boolean;      // свободный центр (для 5x5)
     mode: 'standard' | 'blackout';
-    goalsSource?: string;     // подпись/версия пула
+    goalsSource?: string;     // подпись/версии пула
+    goalsSourceType: 'local' | 'sheets'; // тип источника целей
     gameMode: 'pvp' | 'pve'; // новый режим игры
     botMode?: 'test' | 'easy' | 'medium' | 'hard'; // сложность бота (только PvE)
     botName?: string;         // имя бота (только PvE)
