@@ -13,6 +13,18 @@ export type RoomSettings = {
     freeCenter: boolean;      // свободный центр (для 5x5)
     mode: 'standard' | 'blackout';
     goalsSource?: string;     // подпись/версия пула
+    gameMode: 'pvp' | 'pve'; // новый режим игры
+    botMode?: 'test' | 'easy' | 'medium' | 'hard'; // сложность бота (только PvE)
+    botName?: string;         // имя бота (только PvE)
+};
+
+export type GameStage = 'create' | 'seed' | 'plan' | 'play' | 'paused' | 'finished';
+
+export type GameTimerState = {
+    stage: GameStage;
+    timerValue: number; // секунды
+    timerRunning: boolean;
+    startedAt?: number; // timestamp UTC, для синхронизации
 };
 
 export type SharedState = {

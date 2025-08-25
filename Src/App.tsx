@@ -1,11 +1,11 @@
-import React from 'react'
+import React, { useState, useRef } from 'react'
 import * as Y from 'yjs'
 import TopBar from './components/TopBar'
 import Board from './components/Board'
 import PlayersPanel, { type Player } from './components/PlayersPanel'
 import { initY } from './lib/y'
 import { buildBoard } from './lib/board'
-import type { GoalsPool, RoomSettings } from './types'
+import type { GoalsPool, RoomSettings, GameTimerState, GameStage } from './types'
 import './styles.css'
 import goalsData from './data/goals.example.json'
 import ActionLog, { type Action } from './components/ActionLog'
@@ -49,6 +49,7 @@ export default function App() {
     const yHits = React.useMemo(() => doc.getMap<Y.Array<string>>('hits'), [doc])
     const ySettings = React.useMemo(() => doc.getMap<any>('settings'), [doc])
     const yLog = React.useMemo(() => doc.getArray<Action>('log'), [doc])
+    const yTimer = React.useMemo(() => doc.getMap<any>('timer'), [doc])
 
     // ===== локальные данные целей/лейблов =====
     const [pool, setPool] = React.useState<GoalsPool>([])
@@ -57,13 +58,66 @@ export default function App() {
     // ===== лог действий =====
     const [actions, setActions] = React.useState<Action[]>([])
     React.useEffect(() => {
-        const updateLog = () => setActions(yLog.toArray())
-        updateLog()
-        yLog.observe(updateLog)
-        return () => yLog.unobserve(updateLog)
+        const update = () => setActions(yLog.toArray())
+        update()
+        yLog.observe(update)
+        return () => yLog.unobserve(update)
     }, [yLog])
 
-    // ===== загрузка целей =====
+    // ===== UI для выбора seed =====
+    const [showSeedDialog, setShowSeedDialog] = useState(false);
+    const [pendingSeed, setPendingSeed] = useState('');
+
+    // ===== ручной выбор комнаты — только хост =====
+    const [roomInput, setRoomInput] = React.useState('')
+
+    // ===== локальный стейт таймера =====
+    const [gameTimer, setGameTimer] = React.useState<GameTimerState | null>(null);
+
+    // ===== PvE бот =====
+    const botTimerRef = useRef<number | null>(null);
+
+    // ===== вычисляемые переменные (должны быть после всех useState) =====
+    const isGuest = (awareness.getLocalState() as any)?.role === 'guest';
+    const gameMode = (ySettings.get('gameMode') as 'pvp' | 'pve') ?? 'pvp';
+    const guestBlocked = gameMode === 'pve' && isGuest;
+
+    // ===== локальный стейт таймера =====
+    React.useEffect(() => {
+        const update = () => {
+            const t = {
+                stage: yTimer.get('stage') as GameStage || 'create',
+                timerValue: yTimer.get('timerValue') ?? 0,
+                timerRunning: yTimer.get('timerRunning') ?? false,
+                startedAt: yTimer.get('startedAt') ?? undefined,
+            };
+            setGameTimer(t);
+        };
+        update();
+        yTimer.observe(update);
+        return () => yTimer.unobserve(update);
+    }, [yTimer]);
+
+    // Таймер уменьшения каждую секунду
+    React.useEffect(() => {
+        if (!gameTimer?.timerRunning || gameTimer.stage === 'finished') return;
+
+        const interval = setInterval(() => {
+            if (gameTimer.stage === 'play') {
+                // Для этапа "игра" - таймер идёт вперёд от 0
+                setTimerState({ timerValue: (gameTimer.timerValue || 0) + 1 });
+            } else {
+                // Для других этапов - таймер идёт назад к 0
+                if (gameTimer.timerValue > 0) {
+                    setTimerState({ timerValue: Math.max(0, (gameTimer.timerValue || 0) - 1) });
+                }
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [gameTimer?.timerRunning, gameTimer?.timerValue, gameTimer?.stage]);
+
+    // ===== локальные данные целей/лейблов =====
     React.useEffect(() => {
         const dict: Record<string, string> = { '__FREE__': 'Free Space' }
             ; (goalsData as any[]).forEach((g: any) => { dict[g.id] = g.text })
@@ -72,6 +126,24 @@ export default function App() {
         doc.transact(() => { ySettings.set('goalsSource', 'goals.example.json') })
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
+
+    // ===== инициализация таймера при первом запуске =====
+    React.useEffect(() => {
+        const me = awareness.getLocalState() as any
+        const hostUid = ySettings.get('hostUid') as string
+        const amHost = !!me?.uid && me.uid === hostUid
+
+        // Просто инициализируем таймер, как для этапа 'plan'
+        if (amHost && !yTimer.has('stage')) {
+            // Добавляем небольшую задержку для полной инициализации yTimer
+            setTimeout(() => {
+                if (!yTimer.has('stage')) {
+                    nextStage('create', 3 * 60); // 3 минуты на создание персонажа
+                }
+            }, 500);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [awareness, ySettings, yTimer]);
 
     // ===== awareness: игрок + роли/цвета с учётом ?guest=1 =====
     React.useEffect(() => {
@@ -136,19 +208,28 @@ export default function App() {
     const [players, setPlayers] = React.useState<Player[]>([])
     React.useEffect(() => {
         const update = () => {
-            // === NEW: дедупликация по uid, чтобы не показывать "призраков"
             const byUid = new Map<string, Player>()
                 ; (awareness.getStates() as Map<number, any>).forEach((s) => {
                     if (s?.uid) byUid.set(s.uid, {
                         uid: s.uid, name: s.name, color: s.color, role: s.role
                     })
                 })
+
+            // Добавляем бота в PvE
+            if (gameMode === 'pve' && !byUid.has('bot')) {
+                byUid.set('bot', { uid: 'bot', name: settings.botName || 'Bot', color: '#3b82f6', role: 'guest' })
+            }
+
             setPlayers(Array.from(byUid.values()))
         }
         update()
         awareness.on('change', update)
-        return () => { awareness.off('change', update) }
-    }, [awareness])
+        ySettings.observe(update)
+        return () => {
+            awareness.off('change', update)
+            ySettings.unobserve(update)
+        }
+    }, [awareness, ySettings, gameMode])
 
     // ===== перерисовка на изменения Yjs =====
     const [, force] = React.useReducer(x => x + 1, 0)
@@ -172,6 +253,7 @@ export default function App() {
         if (!ySettings.has('size')) ySettings.set('size', 5)
         if (!ySettings.has('freeCenter')) ySettings.set('freeCenter', false)
         if (!ySettings.has('mode')) ySettings.set('mode', 'standard')
+        if (!ySettings.has('botMode')) ySettings.set('botMode', 'medium')
     }, [ySettings])
 
     const settings: RoomSettings = {
@@ -180,6 +262,28 @@ export default function App() {
         freeCenter: (ySettings.get('freeCenter') as boolean) ?? true,
         mode: (ySettings.get('mode') as 'standard' | 'blackout') ?? 'standard',
         goalsSource: (ySettings.get('goalsSource') as string) ?? undefined,
+        gameMode: (ySettings.get('gameMode') as 'pvp' | 'pve') ?? 'pvp',
+        botMode: (ySettings.get('botMode') as 'test' | 'easy' | 'medium' | 'hard') ?? 'easy',
+        botName: (ySettings.get('botName') as string) ?? undefined,
+    }
+
+    // ===== функции управления таймером и этапами (заглушки) =====
+    function setTimerState(patch: Partial<GameTimerState>) {
+        doc.transact(() => {
+            for (const [k, v] of Object.entries(patch)) {
+                yTimer.set(k, v);
+            }
+        });
+    }
+    function startTimer() { setTimerState({ timerRunning: true, startedAt: Date.now() }); }
+    function pauseTimer() { setTimerState({ timerRunning: false }); }
+    function nextStage(stage: GameStage, timerValue: number) {
+        setTimerState({
+            stage,
+            timerValue,
+            timerRunning: false,
+            startedAt: undefined
+        });
     }
 
     // ===== генерация — только хост =====
@@ -206,10 +310,15 @@ export default function App() {
             if (cancelled) return
             if (!isHost) return
             if (yBoard.length === 0 && pool.length > 0) regenerate()
+
+            // Инициализируем таймер после полной синхронизации
+            if (!yTimer.has('stage')) {
+                nextStage('create', 3 * 60); // 3 минуты на создание персонажа
+            }
         })
         return () => { cancelled = true }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [persist, yBoard, pool, isHost])
+    }, [persist, yBoard, pool, isHost, yTimer])
 
     // ===== изменение настроек — только хост =====
     function patchSettings(patch: Partial<RoomSettings>) {
@@ -270,6 +379,8 @@ export default function App() {
     function getColor(uids: string[]) {
         if (!uids.length) return undefined
         const firstUid = uids[0]
+        // Специальный случай: бот может не присутствовать в awareness, но должен быть синим
+        if (firstUid === 'bot') return '#3b82f6'
         const state = Array.from(awareness.getStates().values()).find(s => s?.uid === firstUid)
         return state?.color as string | undefined
     }
@@ -283,7 +394,6 @@ export default function App() {
     }
 
     // ===== ручной выбор комнаты — только хост =====
-    const [roomInput, setRoomInput] = React.useState('')
     React.useEffect(() => { setRoomInput(roomId) }, [roomId])
 
     function goToRoom() {
@@ -310,6 +420,91 @@ export default function App() {
 
     const peersIncludingMe = awareness.getStates().size || 0
 
+    // Разрешение взаимодействия с сеткой: только во время этапа "Игра" и когда таймер запущен
+    const interactivityAllowed = gameTimer?.stage === 'play' && !!gameTimer?.timerRunning
+
+    // ===== UI для выбора seed =====
+    React.useEffect(() => {
+        if (isHost && gameTimer?.stage === 'seed') {
+            setPendingSeed(settings.seed || '');
+            setShowSeedDialog(true);
+        } else {
+            setShowSeedDialog(false);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [gameTimer?.stage, isHost]);
+    function handleSeedGenerate() {
+        patchSettings({ seed: pendingSeed || Math.random().toString(36).slice(2, 8) });
+        regenerate();
+        nextStage('plan', 5 * 60); // 5 минут на планирование
+        setShowSeedDialog(false);
+    }
+    function handleRandomSeed() {
+        setPendingSeed(Math.random().toString(36).slice(2, 8));
+    }
+
+    // ===== PvE бот =====
+    React.useEffect(() => {
+        // Бот работает только у хоста, в PvE, на этапе 'play', если не пауза
+        if (!isHost || gameMode !== 'pve' || gameTimer?.stage !== 'play' || !gameTimer?.timerRunning) {
+            if (botTimerRef.current) clearTimeout(botTimerRef.current);
+            botTimerRef.current = null;
+            return;
+        }
+        // Проверка на наличие реального гостя не требуется (по ТЗ)
+        function botMove() {
+            // Найти свободные клетки на основе актуального состояния yHits/yBoard
+            const boardArr = yBoard.toArray();
+            const freeCells: number[] = [];
+            for (let i = 0; i < boardArr.length; i++) {
+                const arr = yHits.get(String(i)) as Y.Array<string> | undefined;
+                const len = arr ? arr.toArray().length : 0;
+                if (len === 0) freeCells.push(i);
+            }
+            if (freeCells.length === 0) return;
+            const idx = freeCells[Math.floor(Math.random() * freeCells.length)];
+            // Отметить клетку от имени бота
+            doc.transact(() => {
+                const key = String(idx);
+                let arr = yHits.get(key) as Y.Array<string> | undefined;
+                if (!arr) {
+                    arr = new Y.Array<string>();
+                    yHits.set(key, arr);
+                }
+                if (!arr.toArray().includes('bot')) {
+                    arr.push(['bot']);
+                    yLog.push([{
+                        playerName: settings.botName || 'Bot',
+                        cellText: `отметил «${labelOf(yBoard.get(idx))}»`,
+                        timestamp: Date.now(),
+                        color: '#3b82f6',
+                    }]);
+                }
+            });
+        }
+        // Случайный интервал (на основе сложности бота)
+        function scheduleBotMove() {
+            const mode = settings.botMode || 'easy'
+            let minMs = 15 * 60_000, maxMs = 30 * 60_000
+            if (mode === 'test') { minMs = 10_000; maxMs = 30_000 }
+            else if (mode === 'easy') { minMs = 20 * 60_000; maxMs = 40 * 60_000 }
+            else if (mode === 'medium') { minMs = 15 * 60_000; maxMs = 30 * 60_000 }
+            else if (mode === 'hard') { minMs = 10 * 60_000; maxMs = 20 * 60_000 }
+            const interval = minMs + Math.random() * (maxMs - minMs)
+            botTimerRef.current = window.setTimeout(() => {
+                botMove();
+                scheduleBotMove();
+            }, interval);
+        }
+        // Запускаем расписание сразу (без быстрого первого хода)
+        scheduleBotMove();
+        return () => {
+            if (botTimerRef.current) clearTimeout(botTimerRef.current);
+            botTimerRef.current = null;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isHost, gameMode, gameTimer?.stage, gameTimer?.timerRunning, settings.botMode, yBoard, yHits, yLog]);
+
     return (
         <div className="max-w-6xl mx-auto p-4 space-y-4">
             <h1 className="text-2xl font-bold">Elden Ring Bingo</h1>
@@ -317,25 +512,42 @@ export default function App() {
             {isHost ? (
                 <>
                     <TopBar
-                        settings={settings}
+                        settings={{ ...settings, gameMode }}
                         onChange={patchSettings}
                         onRegenerate={regenerate}
                         showLoaders={false}
+                        gameTimer={gameTimer || undefined}
+                        isHost={isHost}
+                        onStart={startTimer}
+                        onPause={pauseTimer}
+                        onNextStage={() => {
+                            // Простой цикл этапов
+                            const order: GameStage[] = ['create', 'seed', 'plan', 'play', 'finished'];
+                            const cur = gameTimer?.stage || 'create';
+
+                            if (cur === 'play' && gameTimer) {
+                                // Если мы на этапе "игра", то переходим к "финиш" и сохраняем текущее время
+                                nextStage('finished', gameTimer.timerValue);
+                            } else {
+                                // Для других этапов - обычный переход к следующему
+                                const idx = order.indexOf(cur);
+                                const next = order[Math.min(idx + 1, order.length - 1)];
+
+                                let timerValue = 0;
+                                if (next === 'create') timerValue = 3 * 60; // 180 секунд = 3 минуты
+                                if (next === 'plan') timerValue = 5 * 60;   // 300 секунд = 5 минут
+                                if (next === 'play') timerValue = 0;        // Основной таймер
+
+                                nextStage(next, timerValue);
+                            }
+                        }}
+                        onResetRun={() => {
+                            // Сброс в начальное состояние таймера и этапов
+                            nextStage('create', 3 * 60);
+                            pauseTimer();
+                            setShowSeedDialog(false);
+                        }}
                     />
-                    <div className="rounded-xl border border-neutral-700 p-3 flex items-center gap-2">
-                        <input
-                            readOnly
-                            value={makeInviteUrl()}
-                            className="flex-1 px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-sm"
-                        />
-                        <button
-                            onClick={copyInvite}
-                            className="px-3 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm"
-                            title="Скопировать ссылку"
-                        >
-                            Пригласить
-                        </button>
-                    </div>
                 </>
             ) : (
                 <div className="rounded-xl border border-neutral-700 p-3 text-sm opacity-80 space-y-2">
@@ -353,6 +565,25 @@ export default function App() {
                 </div>
             )}
 
+            {showSeedDialog && (
+                <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50">
+                    <div className="bg-neutral-900 p-6 rounded-xl flex flex-col gap-4 w-96 border border-neutral-700">
+                        <div className="text-lg font-bold">Выберите seed для генерации сетки</div>
+                        <input
+                            className="px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-sm"
+                            value={pendingSeed}
+                            onChange={e => setPendingSeed(e.target.value)}
+                            placeholder="Введите seed или сгенерируйте случайный"
+                            maxLength={32}
+                        />
+                        <div className="flex gap-2">
+                            <button onClick={handleRandomSeed} className="px-3 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm">Случайный seed</button>
+                            <button onClick={handleSeedGenerate} className="px-3 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-sm font-bold">Сгенерировать сетку</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="flex gap-4">
                 <div className="flex-1">
                     <Board
@@ -362,6 +593,7 @@ export default function App() {
                         onToggle={toggleCell}
                         labelOf={labelOf}
                         getColor={getColor}
+                        disabled={guestBlocked || !interactivityAllowed}
                     />
                 </div>
 
@@ -388,6 +620,24 @@ export default function App() {
                             maxLength={24}
                         />
                     </div>
+
+                    {/* Ссылка-приглашение — только для хоста */}
+                    {isHost && (
+                        <div className="rounded-xl border border-neutral-700 p-3 flex items-center gap-2">
+                            <input
+                                readOnly
+                                value={makeInviteUrl()}
+                                className="flex-1 px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-sm"
+                            />
+                            <button
+                                onClick={copyInvite}
+                                className="px-3 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm"
+                                title="Скопировать ссылку"
+                            >
+                                Пригласить
+                            </button>
+                        </div>
+                    )}
 
                     {/* Комната — только для хоста */}
                     {isHost && (

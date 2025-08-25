@@ -8,9 +8,10 @@ type Props = {
     onToggle: (i: number) => void
     labelOf: (id: string) => string
     getColor?: (uids: string[]) => string | undefined
+    disabled?: boolean // новый проп
 }
 
-export default function Board({ size, board, hits, onToggle, labelOf, getColor }: Props) {
+export default function Board({ size, board, hits, onToggle, labelOf, getColor, disabled }: Props) {
     const style = useMemo(() => ({
         gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))`,
     }), [size])
@@ -68,10 +69,11 @@ export default function Board({ size, board, hits, onToggle, labelOf, getColor }
                         key={i}
                         text={labelOf(id)}
                         markedBy={uids}
-                        onToggle={() => onToggle(i)}
+                        onToggle={disabled ? undefined : () => onToggle(i)}
                         isFree={id === '__FREE__'}
                         color={color}
                         fontPx={fontPx}
+                        disabled={disabled}
                     />
                 )
             })}
