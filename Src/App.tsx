@@ -81,6 +81,7 @@ export default function App() {
     const isGuest = (awareness.getLocalState() as any)?.role === 'guest';
     const gameMode = (ySettings.get('gameMode') as 'pvp' | 'pve') ?? 'pvp';
     const guestBlocked = gameMode === 'pve' && isGuest;
+    const winner = ySettings.get('winner') as string | undefined;
 
     // ===== локальный стейт таймера =====
     React.useEffect(() => {
@@ -446,13 +447,21 @@ export default function App() {
     // ===== PvE бот =====
     React.useEffect(() => {
         // Бот работает только у хоста, в PvE, на этапе 'play', если не пауза
-        if (!isHost || gameMode !== 'pve' || gameTimer?.stage !== 'play' || !gameTimer?.timerRunning) {
+        if (!isHost || gameMode !== 'pve' || gameTimer?.stage !== 'play' || !gameTimer?.timerRunning || winner) {
             if (botTimerRef.current) clearTimeout(botTimerRef.current);
             botTimerRef.current = null;
             return;
         }
         // Проверка на наличие реального гостя не требуется (по ТЗ)
-        function botMove() {
+        function botMove(): boolean {
+            if (winner) return false;
+            // Подсчитать количество меток бота
+            let botMarks = 0;
+            yHits.forEach(arr => {
+                botMarks += arr.toArray().filter(v => v === 'bot').length;
+            });
+            if (botMarks >= 13) return false;
+
             // Найти свободные клетки на основе актуального состояния yHits/yBoard
             const boardArr = yBoard.toArray();
             const freeCells: number[] = [];
@@ -461,7 +470,7 @@ export default function App() {
                 const len = arr ? arr.toArray().length : 0;
                 if (len === 0) freeCells.push(i);
             }
-            if (freeCells.length === 0) return;
+            if (freeCells.length === 0) return false;
             const idx = freeCells[Math.floor(Math.random() * freeCells.length)];
             // Отметить клетку от имени бота
             doc.transact(() => {
@@ -481,6 +490,7 @@ export default function App() {
                     }]);
                 }
             });
+            return true;
         }
         // Случайный интервал (на основе сложности бота)
         function scheduleBotMove() {
@@ -492,7 +502,11 @@ export default function App() {
             else if (mode === 'hard') { minMs = 10 * 60_000; maxMs = 20 * 60_000 }
             const interval = minMs + Math.random() * (maxMs - minMs)
             botTimerRef.current = window.setTimeout(() => {
-                botMove();
+                if (!botMove()) {
+                    if (botTimerRef.current) clearTimeout(botTimerRef.current);
+                    botTimerRef.current = null;
+                    return;
+                }
                 scheduleBotMove();
             }, interval);
         }
@@ -503,7 +517,7 @@ export default function App() {
             botTimerRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isHost, gameMode, gameTimer?.stage, gameTimer?.timerRunning, settings.botMode, yBoard, yHits, yLog]);
+    }, [isHost, gameMode, gameTimer?.stage, gameTimer?.timerRunning, settings.botMode, yBoard, yHits, yLog, winner]);
 
     return (
         <div className="max-w-6xl mx-auto p-4 space-y-4">
