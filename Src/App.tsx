@@ -432,6 +432,9 @@ export default function App() {
                 }])
             }
         })
+
+        // Проверяем условие победы после изменения клетки
+        checkWinCondition()
     }
 
     // ===== hits obj =====
@@ -439,6 +442,45 @@ export default function App() {
     yHits.forEach((arr, k) => {
         hits[Number(k)] = (arr as Y.Array<string>).toArray()
     })
+
+    // ===== проверка победы =====
+    function checkWinCondition() {
+        if (gameTimer?.stage !== 'play') return
+
+        // Подсчет клеток для каждого игрока
+        const playerScores: Record<string, number> = {}
+
+        Object.values(hits).forEach(playerUids => {
+            playerUids.forEach(uid => {
+                if (uid === 'bot') {
+                    playerScores['Bot'] = (playerScores['Bot'] || 0) + 1
+                } else {
+                    const player = Array.from(awareness.getStates().values()).find(s => s?.uid === uid)
+                    if (player) {
+                        playerScores[player.name] = (playerScores[player.name] || 0) + 1
+                    }
+                }
+            })
+        })
+
+        // Проверка на победу (ровно 13 клеток)
+        for (const [playerName, score] of Object.entries(playerScores)) {
+            if (score === 12) {
+                // Автоматическая победа - после отметки 13-й клетки
+                nextStage('finished', gameTimer.timerValue)
+
+                // Добавляем лог победы
+                yLog.push([{
+                    playerName: playerName.toUpperCase(),
+                    cellText: 'ПОБЕДИЛ',
+                    timestamp: Date.now(),
+                    color: '#ffffff'
+                }])
+
+                return
+            }
+        }
+    }
 
     // ===== helpers =====
     function labelOf(id: string) { return labels[id] ?? id }
@@ -547,6 +589,9 @@ export default function App() {
                     }]);
                 }
             });
+
+            // Проверяем условие победы после хода бота
+            checkWinCondition();
         }
         // Случайный интервал (на основе сложности бота)
         function scheduleBotMove() {
