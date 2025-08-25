@@ -5,6 +5,7 @@ import Board from './components/Board'
 import PlayersPanel, { type Player } from './components/PlayersPanel'
 import { initY } from './lib/y'
 import { buildBoard } from './lib/board'
+import { parseCSV } from './lib/csv'
 import type { GoalsPool, RoomSettings, GameTimerState, GameStage } from './types'
 import './styles.css'
 import goalsData from './data/goals.example.json'
@@ -12,6 +13,7 @@ import ActionLog, { type Action } from './components/ActionLog'
 
 // адрес HTTP для пинания сервера
 const WS_HTTP = 'https://tinybingo-ws-1.onrender.com';
+const REMOTE_GOALS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6JrTSfk8Q5FGXLVG9sgbJueEWXi4i12agnCNvBTbnM5CNoOXMSt-fC1Ar9liZs0C3nZS99zFjufa-/pub?gid=0&single=true&output=csv";
 
 // GH Pages base (/TinyBingo/)
 function getBase(): string {
@@ -54,6 +56,7 @@ export default function App() {
     // ===== локальные данные целей/лейблов =====
     const [pool, setPool] = React.useState<GoalsPool>([])
     const [labels, setLabels] = React.useState<Record<string, string>>({ '__FREE__': 'Free Space' })
+    const [goalsSource, setGoalsSource] = useState<'local' | 'remote'>('local')
 
     // ===== лог действий =====
     const [actions, setActions] = React.useState<Action[]>([])
@@ -82,6 +85,16 @@ export default function App() {
     const gameMode = (ySettings.get('gameMode') as 'pvp' | 'pve') ?? 'pvp';
     const guestBlocked = gameMode === 'pve' && isGuest;
     const winner = ySettings.get('winner') as string | undefined;
+
+    React.useEffect(() => {
+        const update = () => {
+            const src = ySettings.get('goalsSource') === 'remote-csv' ? 'remote' : 'local'
+            setGoalsSource(src)
+        }
+        update()
+        ySettings.observe(update)
+        return () => ySettings.unobserve(update)
+    }, [ySettings])
 
     // ===== локальный стейт таймера =====
     React.useEffect(() => {
@@ -120,13 +133,39 @@ export default function App() {
 
     // ===== локальные данные целей/лейблов =====
     React.useEffect(() => {
-        const dict: Record<string, string> = { '__FREE__': 'Free Space' }
+        if (goalsSource === 'local') {
+            const dict: Record<string, string> = { '__FREE__': 'Free Space' }
             ; (goalsData as any[]).forEach((g: any) => { dict[g.id] = g.text })
-        setLabels(dict)
-        setPool(goalsData as any)
-        doc.transact(() => { ySettings.set('goalsSource', 'goals.example.json') })
+            setLabels(dict)
+            const newPool = goalsData as GoalsPool
+            setPool(newPool)
+            doc.transact(() => { ySettings.set('goalsSource', 'goals.example.json') })
+            regenerate(newPool)
+        } else {
+            (async () => {
+                try {
+                    const resp = await fetch(REMOTE_GOALS_CSV_URL)
+                    const text = await resp.text()
+                    const rows = parseCSV(text)
+                    const newPool: GoalsPool = rows.map((r, i) => ({
+                        id: r.id || String(i),
+                        text: r.text || r.goal || '',
+                        tags: r.tags ? r.tags.split(/[,;]\s*/).filter(Boolean) : undefined,
+                        weight: r.weight ? Number(r.weight) : undefined,
+                    }))
+                    const dict: Record<string, string> = { '__FREE__': 'Free Space' }
+                    newPool.forEach(g => { dict[g.id] = g.text })
+                    setLabels(dict)
+                    setPool(newPool)
+                    doc.transact(() => { ySettings.set('goalsSource', 'remote-csv') })
+                    regenerate(newPool)
+                } catch (e) {
+                    console.error('Failed to load remote goals', e)
+                }
+            })()
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [goalsSource])
 
     // ===== инициализация таймера при первом запуске =====
     React.useEffect(() => {
@@ -288,13 +327,14 @@ export default function App() {
     }
 
     // ===== генерация — только хост =====
-    function regenerate() {
+    function regenerate(nextPool?: GoalsPool) {
         const me = awareness.getLocalState() as any
         const hostUid = ySettings.get('hostUid') as string
         const amHost = !!me?.uid && me.uid === hostUid
         if (!amHost) return
 
-        const ids = buildBoard(pool, settings.size, settings.seed, false)
+        const p = nextPool ?? pool
+        const ids = buildBoard(p, settings.size, settings.seed, false)
         doc.transact(() => {
             yBoard.delete(0, yBoard.length)
             yBoard.insert(0, ids)
@@ -529,7 +569,8 @@ export default function App() {
                         settings={{ ...settings, gameMode }}
                         onChange={patchSettings}
                         onRegenerate={regenerate}
-                        showLoaders={false}
+                        goalsSource={goalsSource}
+                        setGoalsSource={setGoalsSource}
                         gameTimer={gameTimer || undefined}
                         isHost={isHost}
                         onStart={startTimer}
