@@ -5,6 +5,8 @@ type Props = {
     settings: RoomSettings
     onChange: (patch: Partial<RoomSettings>) => void
     onRegenerate: () => void
+    onLoadGoalsFile?: (file: File) => void
+    onLoadGoalsUrl?: (url: string) => void
     showLoaders?: boolean
     gameTimer?: GameTimerState
     isHost?: boolean
@@ -12,8 +14,6 @@ type Props = {
     onPause?: () => void
     onNextStage?: () => void
     onResetRun?: () => void
-    goalsSource: 'local' | 'remote'
-    setGoalsSource: React.Dispatch<React.SetStateAction<'local' | 'remote'>>
 }
 
 
@@ -21,6 +21,8 @@ export default function TopBar({
     settings,
     onChange,
     onRegenerate,
+    onLoadGoalsFile,
+    onLoadGoalsUrl,
     showLoaders = true,
     gameTimer,
     isHost,
@@ -28,9 +30,10 @@ export default function TopBar({
     onPause,
     onNextStage,
     onResetRun,
-    goalsSource,
-    setGoalsSource,
 }: Props) {
+
+    const [url, setUrl] = React.useState('')
+
     function formatTime(sec: number) {
         const m = Math.floor(sec / 60)
         const s = sec % 60
@@ -166,20 +169,31 @@ export default function TopBar({
                 </div>
             )}
 
-            {showLoaders && (
+            {/* {showLoaders && (
                 <div className="flex items-center gap-2">
-                    <label className="text-sm opacity-80">Goals</label>
-                    <select
-                        value={goalsSource}
-                        onChange={e => setGoalsSource(e.target.value as 'local' | 'remote')}
+                    <input
+                        type="file"
+                        accept=".json,.csv"
+                        onChange={e => {
+                            const f = e.target.files?.[0]
+                            if (f) onLoadGoalsFile?.(f)
+                        }}
+                    />
+                    <input
+                        value={url}
+                        onChange={e => setUrl(e.target.value)}
+                        placeholder="https://.../goals.json|csv"
+                        className="px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-sm w-72"
+                    />
+                    <button
+                        onClick={() => onLoadGoalsUrl?.(url)}
                         className="px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-sm"
                     >
-                        <option value="local">Local file</option>
-                        <option value="remote">Google Sheet</option>
-                    </select>
+                        Load URL
+                    </button>
                     <span className="text-xs opacity-70">{settings.goalsSource ?? 'no pool loaded'}</span>
                 </div>
-            )}
+            )} */}
 
         </div>
     )
