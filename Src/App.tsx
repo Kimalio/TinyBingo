@@ -730,6 +730,27 @@ export default function App() {
                     )}
 
                     <PlayersPanel players={players} />
+
+                    {/* Таймер и этап для гостей */}
+                    {!isHost && gameTimer && (
+                        <div className="rounded-xl border border-neutral-700 p-3">
+                            <div className="text-sm opacity-80 mb-2">Игровой процесс</div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold">Этап:</span>
+                                <span className="text-sm">{gameTimer.stage === 'create' ? 'Создание персонажа' :
+                                    gameTimer.stage === 'seed' ? 'Выбор seed и генерация' :
+                                        gameTimer.stage === 'plan' ? 'Планирование маршрута' :
+                                            gameTimer.stage === 'play' ? 'Игра' :
+                                                gameTimer.stage === 'paused' ? 'Пауза' :
+                                                    gameTimer.stage === 'finished' ? 'Финиш' : gameTimer.stage}</span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-2">
+                                <span className="text-sm font-bold">Время:</span>
+                                <span className="text-sm">{Math.floor(gameTimer.timerValue / 60)}:{(gameTimer.timerValue % 60).toString().padStart(2, '0')}</span>
+                            </div>
+                        </div>
+                    )}
+
                     <ActionLog actions={actions} />
                 </div>
             </div>
