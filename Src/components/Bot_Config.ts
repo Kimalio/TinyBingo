@@ -56,21 +56,21 @@ export const BOT_CONFIGS: Record<BotDifficulty, BotDifficultyConfig> = {
             firstMoveDelay: 1_000     // Первый ход через 1 секунду
         },
         behavior: {
-            aggressiveness: 0.5,      // Средняя агрессивность
-            defensiveness: 0.5,       // Средняя защита
+            aggressiveness: 0.7,      // Средняя агрессивность
+            defensiveness: 0.7,       // Средняя защита
             planningDepth: 1,         // Планирование на 1 ход
             bluffChance: 0.1,         // 10% случайных ходов
             threatResponseThreshold: 4, // Блокировать только при 4+ клетках игрока
-            blockPlayerChance: 0.1,    // Вероятность помешать игроку (0-1)
-            strategicMoveDifficultyThreshold: 0.5 // Максимальная сложность для стратегических ходов
+            blockPlayerChance: 0.9,    // Вероятность помешать игроку (0-1)
+            strategicMoveDifficultyThreshold: 0.9 // Максимальная сложность для стратегических ходов
         },
         strategy: {
-            lineCompletionPriority: 0.3,   // Низкий приоритет линий
-            blockingPriority: 0.2,         // Низкий приоритет блокировки
-            quantityBingoPriority: 0.8,    // Высокий приоритет количества
-            difficultyPreference: 0.6,     // Умеренное предпочтение простых
-            preferLineCompletion: 0.3,
-            preferBlocking: 0.2
+            lineCompletionPriority: 0.9,   // Низкий приоритет линий
+            blockingPriority: 0.9,         // Низкий приоритет блокировки
+            quantityBingoPriority: 0.5,    // Высокий приоритет количества
+            difficultyPreference: 0.9,     // Умеренное предпочтение простых
+            preferLineCompletion: 0.9,
+            preferBlocking: 0.9
         },
         adaptation: {
             planChangeThreshold: 0.5,      // Умеренно меняет планы
@@ -86,18 +86,18 @@ export const BOT_CONFIGS: Record<BotDifficulty, BotDifficultyConfig> = {
             firstMoveDelay: 15 * 60_000     // Первый ход через 15 минут
         },
         behavior: {
-            aggressiveness: 0.4,      // Низкая агрессивность
-            defensiveness: 0.3,       // Низкая защита
+            aggressiveness: 0.6,      // Низкая агрессивность
+            defensiveness: 0.6,       // Низкая защита
             planningDepth: 2,         // Планирование на 2 хода
             bluffChance: 0.40,         // 40% случайных ходов
-            threatResponseThreshold: 4, // Блокировать только при 4+ клетках игрока
-            blockPlayerChance: 0.2,    // Вероятность помешать игроку (0-1)
+            threatResponseThreshold: 2, // Блокировать только при 4+ клетках игрока
+            blockPlayerChance: 0.7,    // Вероятность помешать игроку (0-1)
             strategicMoveDifficultyThreshold: 0.3 // Максимальная сложность для стратегических ходов
         },
         strategy: {
-            lineCompletionPriority: 0.3,   // Низкий приоритет линий
-            blockingPriority: 0.2,         // Низкий приоритет блокировки
-            quantityBingoPriority: 0.8,    // Высокий приоритет количества
+            lineCompletionPriority: 0.6,   // Низкий приоритет линий
+            blockingPriority: 0.6,         // Низкий приоритет блокировки
+            quantityBingoPriority: 0.5,    // Высокий приоритет количества
             difficultyPreference: 0.6,     // Умеренное предпочтение простых
             preferLineCompletion: 0.3,
             preferBlocking: 0.2
@@ -116,8 +116,8 @@ export const BOT_CONFIGS: Record<BotDifficulty, BotDifficultyConfig> = {
             firstMoveDelay: 10 * 60_000     // Первый ход через 10 минут
         },
         behavior: {
-            aggressiveness: 0.6,      // Средняя агрессивность
-            defensiveness: 0.5,       // Средняя защита
+            aggressiveness: 0.7,      // Средняя агрессивность
+            defensiveness: 0.7,       // Средняя защита
             planningDepth: 3,         // Планирование на 3 хода
             bluffChance: 0.3,         // 30% случайных ходов
             threatResponseThreshold: 3, // Блокировать при 3+ клетках игрока
@@ -125,12 +125,12 @@ export const BOT_CONFIGS: Record<BotDifficulty, BotDifficultyConfig> = {
             strategicMoveDifficultyThreshold: 0.7 // Максимальная сложность для стратегических ходов
         },
         strategy: {
-            lineCompletionPriority: 0.6,   // Средний приоритет линий
-            blockingPriority: 0.4,         // Средний приоритет блокировки
-            quantityBingoPriority: 0.6,    // Средний приоритет количества
+            lineCompletionPriority: 0.7,   // Средний приоритет линий
+            blockingPriority: 0.7,         // Средний приоритет блокировки
+            quantityBingoPriority: 0.5,    // Средний приоритет количества
             difficultyPreference: 0.7,     // Высокое предпочтение простых
-            preferLineCompletion: 0.6,
-            preferBlocking: 0.4
+            preferLineCompletion: 0.7,
+            preferBlocking: 0.7
         },
         adaptation: {
             planChangeThreshold: 0.4,      // Часто меняет планы
@@ -141,9 +141,9 @@ export const BOT_CONFIGS: Record<BotDifficulty, BotDifficultyConfig> = {
 
     hard: {
         timing: {
-            minInterval: 10_000,//10 * 60_000,  // 10 минут
-            maxInterval: 20_000,//20 * 60_000,  // 20 минут
-            firstMoveDelay: 2_000      // Первый ход через 2 секунды
+            minInterval: 10 * 60_000,  // 10 минут
+            maxInterval: 20 * 60_000,  // 20 минут
+            firstMoveDelay: 8 * 60_000      // Первый ход через 2 секунды
         },
         behavior: {
             aggressiveness: 0.9,      // Очень высокая агрессивность
