@@ -434,7 +434,20 @@ export default function App() {
         })
 
         // Проверяем условие победы после изменения клетки
+        // Пересчитываем hits после транзакции для корректной проверки бинго
+        const updatedHits: Record<number, string[]> = {}
+        yHits.forEach((arr, k) => {
+            updatedHits[Number(k)] = (arr as Y.Array<string>).toArray()
+        })
+
+        // Временно заменяем глобальный hits для проверки
+        const originalHits = hits
+        Object.assign(hits, updatedHits)
+
         checkWinCondition()
+
+        // Восстанавливаем оригинальный hits
+        Object.assign(hits, originalHits)
     }
 
     // ===== hits obj =====
@@ -443,9 +456,117 @@ export default function App() {
         hits[Number(k)] = (arr as Y.Array<string>).toArray()
     })
 
+    // ===== проверка бинго-победы =====
+    function checkBingoWin() {
+        if (gameTimer?.stage !== 'play') return false
+
+        const size = settings.size || 5
+
+        // Функция для получения индексов линии
+        function getLineIndices(type: 'row' | 'col' | 'diag', index: number): number[] {
+            if (type === 'row') {
+                // Горизонтальный ряд: 0-4, 5-9, 10-14, 15-19, 20-24
+                const start = index * size
+                return Array.from({ length: size }, (_, i) => start + i)
+            } else if (type === 'col') {
+                // Вертикальный столбец: 0,5,10,15,20 | 1,6,11,16,21 | ...
+                return Array.from({ length: size }, (_, i) => index + i * size)
+            } else if (type === 'diag') {
+                if (index === 0) {
+                    // Главная диагональ: 0,6,12,18,24
+                    return Array.from({ length: size }, (_, i) => i * (size + 1))
+                } else {
+                    // Побочная диагональ: 4,8,12,16,20
+                    return Array.from({ length: size }, (_, i) => (i + 1) * (size - 1))
+                }
+            }
+            return []
+        }
+
+        // Проверяем все возможные линии
+        const lines = [
+            // Ряды
+            ...Array.from({ length: size }, (_, i) => ({ type: 'row' as const, index: i })),
+            // Столбцы
+            ...Array.from({ length: size }, (_, i) => ({ type: 'col' as const, index: i })),
+            // Диагонали (только для сеток 5x5)
+            ...(size === 5 ? [
+                { type: 'diag' as const, index: 0 },
+                { type: 'diag' as const, index: 1 }
+            ] : [])
+        ]
+
+        for (const line of lines) {
+            const indices = getLineIndices(line.type, line.index)
+
+            // Проверяем, что все клетки в линии закрыты одним игроком
+            let lineOwner: string | null = null
+            let isComplete = true
+
+            for (const cellIndex of indices) {
+                const cellHits = hits[cellIndex]
+                if (!cellHits || cellHits.length === 0) {
+                    isComplete = false
+                    break
+                }
+
+                // Все клетки в линии должны быть закрыты одним игроком
+                const currentOwner = cellHits[0]
+                if (lineOwner === null) {
+                    lineOwner = currentOwner
+                } else if (lineOwner !== currentOwner) {
+                    isComplete = false
+                    break
+                }
+            }
+
+            if (isComplete && lineOwner) {
+                // Проверяем, что в линии ровно 5 клеток (не больше, не меньше)
+                let closedCells = 0
+                for (const cellIndex of indices) {
+                    if (hits[cellIndex] && hits[cellIndex].length > 0) {
+                        closedCells++
+                    }
+                }
+
+                if (closedCells === 5) {
+                    // Бинго! Найдена полная линия
+                    let winnerName: string
+
+                    if (lineOwner === 'bot') {
+                        winnerName = 'Bot'
+                    } else {
+                        const player = Array.from(awareness.getStates().values()).find(s => s?.uid === lineOwner)
+                        winnerName = player?.name || 'Неизвестный'
+                    }
+
+                    // Автоматическая победа
+                    nextStage('finished', gameTimer.timerValue)
+
+                    // Добавляем лог победы
+                    yLog.push([{
+                        playerName: winnerName.toUpperCase(),
+                        cellText: 'ПОБЕДИЛ',
+                        timestamp: Date.now(),
+                        color: '#ffffff'
+                    }])
+
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
     // ===== проверка победы =====
     function checkWinCondition() {
         if (gameTimer?.stage !== 'play') return
+
+        // Сначала проверяем бинго-победу (5 в ряд/столбец/диагональ)
+        if (checkBingoWin()) {
+            return
+        }
 
         // Подсчет клеток для каждого игрока
         const playerScores: Record<string, number> = {}
@@ -465,7 +586,7 @@ export default function App() {
 
         // Проверка на победу (ровно 13 клеток)
         for (const [playerName, score] of Object.entries(playerScores)) {
-            if (score === 12) {
+            if (score === 13) {
                 // Автоматическая победа - после отметки 13-й клетки
                 nextStage('finished', gameTimer.timerValue)
 
