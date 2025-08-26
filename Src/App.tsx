@@ -9,6 +9,8 @@ import type { GoalsPool, RoomSettings, GameTimerState, GameStage } from './types
 import './styles.css'
 import goalsData from './data/goals.example.json'
 import ActionLog, { type Action } from './components/ActionLog'
+import { simpleBotAI } from './components/Bot_AI'
+import { getRandomInterval, getFirstMoveDelay, type BotDifficulty } from './components/Bot_Config'
 
 // адрес HTTP для пинания сервера
 const WS_HTTP = 'https://tinybingo-ws-1.onrender.com';
@@ -76,6 +78,8 @@ export default function App() {
 
     // ===== PvE бот =====
     const botTimerRef = useRef<number | null>(null);
+    const [botPlan, setBotPlan] = React.useState<any | null>(null);
+    const [lastPlayerMove, setLastPlayerMove] = React.useState<number | undefined>(undefined);
 
     // ===== вычисляемые переменные (должны быть после всех useState) =====
     const isGuest = (awareness.getLocalState() as any)?.role === 'guest';
@@ -146,15 +150,53 @@ export default function App() {
                     // Парсим CSV
                     const lines = csvText.split('\n').filter(line => line.trim());
                     const goals = lines.slice(1).map((line, index) => {
-                        const [id, text] = line.split(',').map(field => field.trim().replace(/"/g, ''));
+                        const fields = line.split(',').map(field => field.trim().replace(/"/g, ''));
+
+                        // Ищем колонку difficulty - она может быть в разных позициях
+                        let id = '';
+                        let text = '';
+                        let difficulty: 1 | 2 | 3 | undefined = undefined;
+
+                        // Пропускаем пустые поля в начале
+                        const nonEmptyFields = fields.filter(field => field.length > 0);
+
+                        if (nonEmptyFields.length >= 3) {
+                            // Формат: id,text,difficulty
+                            [id, text] = nonEmptyFields;
+                            const difficultyStr = nonEmptyFields[2];
+                            if (difficultyStr) {
+                                const parsedDifficulty = parseInt(difficultyStr);
+                                if (!isNaN(parsedDifficulty) && parsedDifficulty >= 1 && parsedDifficulty <= 3) {
+                                    difficulty = parsedDifficulty as 1 | 2 | 3;
+                                }
+                            }
+                        } else if (nonEmptyFields.length === 2) {
+                            // Формат: text,difficulty (без id)
+                            [text] = nonEmptyFields;
+                            const difficultyStr = nonEmptyFields[1];
+                            id = `T${String(index + 1).padStart(3, '0')}`;
+                            if (difficultyStr) {
+                                const parsedDifficulty = parseInt(difficultyStr);
+                                if (!isNaN(parsedDifficulty) && parsedDifficulty >= 1 && parsedDifficulty <= 3) {
+                                    difficulty = parsedDifficulty as 1 | 2 | 3;
+                                }
+                            }
+                        } else if (nonEmptyFields.length === 1) {
+                            // Формат: только text
+                            text = nonEmptyFields[0];
+                            id = `T${String(index + 1).padStart(3, '0')}`;
+                        }
+
                         return {
                             id: id || `T${String(index + 1).padStart(3, '0')}`,
                             text: text || `Цель ${index + 1}`,
+                            difficulty,
                             weight: 1
                         };
                     });
 
                     console.log(`Загружено ${goals.length} целей из CSV`);
+                    console.log('Пример цели с difficulty:', goals[0]); // Отладка
                     const dict: Record<string, string> = { '__FREE__': 'Free Space' };
                     goals.forEach((g: any) => { dict[g.id] = g.text });
 
@@ -180,6 +222,7 @@ export default function App() {
             loadFromSheets();
         } else if (goalsSourceType === 'local') {
             console.log('Загружаем локальные цели...');
+            console.log('Пример локальной цели:', (goalsData as any[])[0]); // Отладка
             // Локальные данные
             const dict: Record<string, string> = { '__FREE__': 'Free Space' };
             (goalsData as any[]).forEach((g: any) => { dict[g.id] = g.text });
@@ -189,7 +232,7 @@ export default function App() {
                 ySettings.set('goalsSource', 'goals.example.json');
             });
         }
-    }, [ySettings, doc, goalsData, ySettings.get('goalsSourceType')])
+    }, [ySettings, doc, goalsData])
 
     // ===== инициализация таймера при первом запуске =====
     React.useEffect(() => {
@@ -281,7 +324,7 @@ export default function App() {
 
             // Добавляем бота в PvE
             if (gameMode === 'pve' && !byUid.has('bot')) {
-                byUid.set('bot', { uid: 'bot', name: settings.botName || 'Bot', color: '#3b82f6', role: 'guest' })
+                byUid.set('bot', { uid: 'bot', name: settings.botName || 'Bot', color: '#22c55e', role: 'guest' })
             }
 
             setPlayers(Array.from(byUid.values()))
@@ -448,6 +491,11 @@ export default function App() {
 
         // Восстанавливаем оригинальный hits
         Object.assign(hits, originalHits)
+
+        // Отслеживаем ход игрока для ИИ бота (только если это отметка, а не снятие)
+        if (idx < 0) {
+            setLastPlayerMove(i);
+        }
     }
 
     // ===== hits obj =====
@@ -608,8 +656,8 @@ export default function App() {
     function getColor(uids: string[]) {
         if (!uids.length) return undefined
         const firstUid = uids[0]
-        // Специальный случай: бот может не присутствовать в awareness, но должен быть синим
-        if (firstUid === 'bot') return '#3b82f6'
+        // Специальный случай: бот может не присутствовать в awareness, но должен быть зеленым
+        if (firstUid === 'bot') return '#22c55e'
         const state = Array.from(awareness.getStates().values()).find(s => s?.uid === firstUid)
         return state?.color as string | undefined
     }
@@ -674,6 +722,14 @@ export default function App() {
 
     // ===== PvE бот =====
     React.useEffect(() => {
+        console.log('=== PvE БОТ useEffect ===');
+        console.log('isHost:', isHost);
+        console.log('gameMode:', gameMode);
+        console.log('gameTimer.stage:', gameTimer?.stage);
+        console.log('gameTimer.timerRunning:', gameTimer?.timerRunning);
+        console.log('pool.length:', pool.length);
+        console.log('========================');
+
         // Бот работает только у хоста, в PvE, на этапе 'play', если не пауза
         if (!isHost || gameMode !== 'pve' || gameTimer?.stage !== 'play' || !gameTimer?.timerRunning) {
             if (botTimerRef.current) clearTimeout(botTimerRef.current);
@@ -682,16 +738,50 @@ export default function App() {
         }
         // Проверка на наличие реального гостя не требуется (по ТЗ)
         function botMove() {
-            // Найти свободные клетки на основе актуального состояния yHits/yBoard
-            const boardArr = yBoard.toArray();
-            const freeCells: number[] = [];
-            for (let i = 0; i < boardArr.length; i++) {
-                const arr = yHits.get(String(i)) as Y.Array<string> | undefined;
-                const len = arr ? arr.toArray().length : 0;
-                if (len === 0) freeCells.push(i);
+            console.log('=== НАЧАЛО botMove ===');
+            console.log('botPlan:', botPlan);
+            console.log('lastPlayerMove:', lastPlayerMove);
+            console.log('======================');
+
+            // Создаем объект BoardState для ИИ
+            const boardState = {
+                board: yBoard.toArray(),
+                hits: Object.fromEntries(
+                    Array.from(yHits.entries()).map(([k, v]) => [Number(k), (v as Y.Array<string>).toArray()])
+                ),
+                size: settings.size || 5
+            };
+
+            // Получаем конфигурацию бота для текущего уровня сложности
+            const botDifficulty = (settings.botMode || 'easy') as BotDifficulty;
+
+            // Создаем объект goals для ИИ
+            const goals: Record<string, any> = {};
+            console.log('Pool для целей:', pool);
+            console.log('Количество целей в pool:', pool.length);
+            pool.forEach(goal => {
+                goals[goal.id] = goal;
+            });
+            console.log('Созданный goals объект:', Object.keys(goals));
+
+            // Вызываем ИИ для получения решения
+            const aiDecision = simpleBotAI(boardState, goals, botDifficulty, lastPlayerMove);
+
+            console.log('=== ОТЛАДКА ИИ БОТА ===');
+            console.log('Решение ИИ:', aiDecision);
+            console.log('Состояние доски:', boardState);
+            console.log('Цели:', Object.keys(goals).length, 'штук');
+            console.log('Сложность бота:', botDifficulty);
+            console.log('========================');
+
+            // Проверяем, что ИИ вернул валидный ход
+            if (aiDecision.nextMove === null || aiDecision.nextMove === undefined) {
+                console.log('❌ ОШИБКА: ИИ не вернул ход, это не должно происходить!');
+                return;
             }
-            if (freeCells.length === 0) return;
-            const idx = freeCells[Math.floor(Math.random() * freeCells.length)];
+
+            const idx = aiDecision.nextMove;
+
             // Отметить клетку от имени бота
             doc.transact(() => {
                 const key = String(idx);
@@ -706,36 +796,48 @@ export default function App() {
                         playerName: settings.botName || 'Bot',
                         cellText: `отметил ${labelOf(yBoard.get(idx))}`,
                         timestamp: Date.now(),
-                        color: '#3b82f6',
+                        color: '#22c55e',
                     }]);
                 }
             });
 
             // Проверяем условие победы после хода бота
-            checkWinCondition();
+            // Пересчитываем hits после транзакции для корректной проверки
+            const updatedHits: Record<number, string[]> = {}
+            yHits.forEach((arr, k) => {
+                updatedHits[Number(k)] = (arr as Y.Array<string>).toArray()
+            })
+
+            // Временно заменяем глобальный hits для проверки
+            const originalHits = hits
+            Object.assign(hits, updatedHits)
+
+            checkWinCondition()
+
+            // Восстанавливаем оригинальный hits
+            Object.assign(hits, originalHits)
         }
         // Случайный интервал (на основе сложности бота)
         function scheduleBotMove() {
-            const mode = settings.botMode || 'easy'
-            let minMs = 15 * 60_000, maxMs = 30 * 60_000
-            if (mode === 'test') { minMs = 10_000; maxMs = 30_000 }
-            else if (mode === 'easy') { minMs = 20 * 60_000; maxMs = 40 * 60_000 }
-            else if (mode === 'medium') { minMs = 15 * 60_000; maxMs = 30 * 60_000 }
-            else if (mode === 'hard') { minMs = 10 * 60_000; maxMs = 20 * 60_000 }
-            const interval = minMs + Math.random() * (maxMs - minMs)
+            const mode = (settings.botMode || 'easy') as BotDifficulty;
+            const interval = getRandomInterval(mode);
             botTimerRef.current = window.setTimeout(() => {
                 botMove();
                 scheduleBotMove();
             }, interval);
         }
-        // Запускаем расписание сразу (без быстрого первого хода)
-        scheduleBotMove();
+        // Запускаем расписание с задержкой первого хода
+        const firstMoveDelay = getFirstMoveDelay((settings.botMode || 'easy') as BotDifficulty);
+        botTimerRef.current = window.setTimeout(() => {
+            botMove();
+            scheduleBotMove();
+        }, firstMoveDelay);
         return () => {
             if (botTimerRef.current) clearTimeout(botTimerRef.current);
             botTimerRef.current = null;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isHost, gameMode, gameTimer?.stage, gameTimer?.timerRunning, settings.botMode, yBoard, yHits, yLog]);
+    }, [isHost, gameMode, gameTimer?.stage, gameTimer?.timerRunning, settings.botMode, yBoard, yHits, yLog, pool]);
 
     return (
         <div className="max-w-6xl mx-auto p-4 space-y-4">

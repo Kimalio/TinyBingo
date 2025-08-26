@@ -1,6 +1,7 @@
 export type Goal = {
     id: string;           // уникальный id (slug)
     text: string;         // видимый текст
+    difficulty?: 1 | 2 | 3; // сложность: 1=easy, 2=medium, 3=hard
     tags?: string[];      // опционально: boss, region:limgrave, difficulty:hard и т.д.
     weight?: number;      // опционально: влияние на вероятность
 };
