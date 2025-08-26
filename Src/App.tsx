@@ -139,7 +139,7 @@ export default function App() {
             const loadFromSheets = async () => {
                 try {
                     console.log('Загружаем цели из Google Sheets...');
-                    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6JrTSfk8Q5FGXLVG9sgbJueEWXi4i12agnCNvBTbnM5CNoOXMSt-fC1Ar9liZs0C3nZS99zFjufa-/pub?gid=0&single=true&output=csv';
+                    const csvUrl = 'https://docs.google.com/spreadsheets/d/1anPHlA1wtAiXUKMHcKKbTa5Cp-qWQY1O9xj-bNPCzls/gviz/tq?tqx=out:csv&sheet=Tasks';
                     const response = await fetch(csvUrl);
                     const csvText = await response.text();
 
