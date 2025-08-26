@@ -340,6 +340,7 @@ export default function App() {
 
     // ===== перерисовка на изменения Yjs =====
     const [, force] = React.useReducer(x => x + 1, 0)
+    const [playerScores, setPlayerScores] = React.useState<Record<string, number>>({})
     React.useEffect(() => {
         const rerender = () => force()
         yBoard.observe(rerender)
@@ -410,6 +411,9 @@ export default function App() {
             yLog.delete(0, yLog.length)
             ySettings.set('initialized', true)
         })
+
+        // Обнуляем счётчики игроков при генерации новой доски
+        setPlayerScores({})
     }
 
     // ===== первая загрузка: только хост генерит, гость ждёт =====
@@ -503,6 +507,27 @@ export default function App() {
     yHits.forEach((arr, k) => {
         hits[Number(k)] = (arr as Y.Array<string>).toArray()
     })
+
+    // ===== подсчет счетов игроков =====
+    React.useEffect(() => {
+        const scores: Record<string, number> = {}
+
+        Object.values(hits).forEach(playerUids => {
+            playerUids.forEach(uid => {
+                if (uid === 'bot') {
+                    const botName = settings.botName || 'Bot'
+                    scores[botName] = (scores[botName] || 0) + 1
+                } else {
+                    const player = Array.from(awareness.getStates().values()).find(s => s?.uid === uid)
+                    if (player) {
+                        scores[player.name] = (scores[player.name] || 0) + 1
+                    }
+                }
+            })
+        })
+
+        setPlayerScores(scores)
+    }, [awareness, settings.botName, yHits])
 
     // ===== проверка бинго-победы =====
     function checkBingoWin() {
@@ -653,6 +678,8 @@ export default function App() {
 
     // ===== helpers =====
     function labelOf(id: string) { return labels[id] ?? id }
+
+
     function getColor(uids: string[]) {
         if (!uids.length) return undefined
         const firstUid = uids[0]
@@ -839,6 +866,24 @@ export default function App() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isHost, gameMode, gameTimer?.stage, gameTimer?.timerRunning, settings.botMode, yBoard, yHits, yLog, pool]);
 
+
+
+    // Подсчитываем счета игроков из существующих данных
+    const currentPlayerScores: Record<string, number> = {}
+    Object.values(hits).forEach(playerUids => {
+        playerUids.forEach(uid => {
+            if (uid === 'bot') {
+                const botName = settings.botName || 'Bot'
+                currentPlayerScores[botName] = (currentPlayerScores[botName] || 0) + 1
+            } else {
+                const player = Array.from(awareness.getStates().values()).find(s => s?.uid === uid)
+                if (player) {
+                    currentPlayerScores[player.name] = (currentPlayerScores[player.name] || 0) + 1
+                }
+            }
+        })
+    })
+
     return (
         <div className="max-w-6xl mx-auto p-4 space-y-4">
             <h1 className="text-2xl font-bold">Elden Ring Bingo</h1>
@@ -880,6 +925,9 @@ export default function App() {
                             nextStage('create', 3 * 60);
                             pauseTimer();
                             setShowSeedDialog(false);
+
+                            // Обнуляем счётчики игроков при новом забеге
+                            setPlayerScores({});
                         }}
                     />
                 </>
@@ -997,7 +1045,7 @@ export default function App() {
                         </div>
                     )}
 
-                    <PlayersPanel players={players} />
+                    <PlayersPanel players={players} playerScores={currentPlayerScores} />
 
                     {/* Таймер и этап для гостей */}
                     {!isHost && gameTimer && (

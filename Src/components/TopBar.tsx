@@ -95,9 +95,15 @@ export default function TopBar({
                             ) : (
                                 <button onClick={onStart} className="px-2 py-1 rounded bg-emerald-700/60 hover:bg-emerald-700 text-sm">Старт</button>
                             )}
-                            <button onClick={onNextStage} className="px-2 py-1 rounded bg-neutral-700/60 hover:bg-neutral-700 text-sm">
-                                {gameTimer.stage === 'play' ? 'Финиш' : 'Следующий этап'}
-                            </button>
+                            {gameTimer.stage === 'play' && gameTimer.timerRunning ? (
+                                <button onClick={onNextStage} className="px-2 py-1 rounded bg-neutral-700/60 hover:bg-neutral-700 text-sm">
+                                    Финиш
+                                </button>
+                            ) : (
+                                <button onClick={onNextStage} className="px-2 py-1 rounded bg-neutral-700/60 hover:bg-neutral-700 text-sm">
+                                    Следующий этап
+                                </button>
+                            )}
                         </>
                     )}
 

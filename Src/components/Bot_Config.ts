@@ -95,9 +95,9 @@ export const BOT_CONFIGS: Record<BotDifficulty, BotDifficultyConfig> = {
             strategicMoveDifficultyThreshold: 0.3 // Максимальная сложность для стратегических ходов
         },
         strategy: {
-            lineCompletionPriority: 0.7,   // Низкий приоритет линий
-            blockingPriority: 0.4,         // Низкий приоритет блокировки
-            quantityBingoPriority: 0.6,    // Высокий приоритет количества
+            lineCompletionPriority: 0.3,   // Низкий приоритет линий
+            blockingPriority: 0.2,         // Низкий приоритет блокировки
+            quantityBingoPriority: 0.8,    // Высокий приоритет количества
             difficultyPreference: 0.6,     // Умеренное предпочтение простых
             preferLineCompletion: 0.3,
             preferBlocking: 0.2
@@ -125,9 +125,9 @@ export const BOT_CONFIGS: Record<BotDifficulty, BotDifficultyConfig> = {
             strategicMoveDifficultyThreshold: 0.7 // Максимальная сложность для стратегических ходов
         },
         strategy: {
-            lineCompletionPriority: 0.8,   // Средний приоритет линий
-            blockingPriority: 0.5,         // Средний приоритет блокировки
-            quantityBingoPriority: 0.5,    // Средний приоритет количества
+            lineCompletionPriority: 0.6,   // Средний приоритет линий
+            blockingPriority: 0.4,         // Средний приоритет блокировки
+            quantityBingoPriority: 0.6,    // Средний приоритет количества
             difficultyPreference: 0.7,     // Высокое предпочтение простых
             preferLineCompletion: 0.6,
             preferBlocking: 0.4
@@ -141,9 +141,9 @@ export const BOT_CONFIGS: Record<BotDifficulty, BotDifficultyConfig> = {
 
     hard: {
         timing: {
-            minInterval: 10 * 60_000,  // 10 минут
-            maxInterval: 20 * 60_000,  // 20 минут
-            firstMoveDelay: 8 * 60_000      // Первый ход через 2 секунды
+            minInterval: 10_000,//10 * 60_000,  // 10 минут
+            maxInterval: 20_000,//20 * 60_000,  // 20 минут
+            firstMoveDelay: 2_000      // Первый ход через 2 секунды
         },
         behavior: {
             aggressiveness: 0.9,      // Очень высокая агрессивность
